@@ -61,7 +61,7 @@ def test_strong_protection_exits_0_and_writes_signed_report(
 
     report_path = only_report(tmp_path)
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert report["schema"] == "auditforge.report/v2"
+    assert report["schema"] == "auditforge.report/v3"
     assert set(report["mappings"]) == {"checks.yaml", "crosswalk.yaml"}
     assert report["findings"][0]["controls"]["SOC2"] == ["CC8.1"]
     assert (report_path.parent / "report.md").read_text(encoding="utf-8").count("✅ PASS") == 5

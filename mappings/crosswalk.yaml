@@ -29,6 +29,17 @@ objectives:
       NIST-800-53r5: [SI-7]
       SOX-ITGC: [ITGC-PC]
 
+  CHG-TEST:
+    title: Changes pass automated testing before they are merged
+    controls:
+      # CC8.1 and A.8.32 include testing changes before implementation; A.8.29 is
+      # security testing in development; CM-3 covers testing changes and SA-11 is
+      # developer testing.
+      SOC2: [CC8.1]
+      ISO27001:2022: [A.8.29, A.8.32]
+      NIST-800-53r5: [CM-3, SA-11]
+      SOX-ITGC: [ITGC-PC]
+
   PRIV-BYPASS:
     title: Privileged users cannot bypass change controls
     controls:
@@ -47,11 +58,13 @@ frameworks:
     A.8.2: Privileged access rights
     A.8.4: Access to source code
     A.8.28: Secure coding
+    A.8.29: Security testing in development and acceptance
     A.8.32: Change management
   NIST-800-53r5:
     AC-5: Separation of duties
     CM-3: Configuration change control
     CM-5: Access restrictions for change
+    SA-11: Developer testing and evaluation
     SI-7: Software, firmware and information integrity
   SOX-ITGC:
     ITGC-PC: Program change management

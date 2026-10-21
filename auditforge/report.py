@@ -13,7 +13,7 @@ from auditforge import __version__
 from auditforge.mappings import Mappings
 from auditforge.models import Evidence, Finding, Status
 
-SCHEMA = "auditforge.report/v2"
+SCHEMA = "auditforge.report/v3"  # v3: added "title"
 
 FRAMEWORK_LABELS = {
     "SOC2": "SOC 2",
@@ -30,6 +30,7 @@ def new_run_id() -> str:
 
 def build_report(
     *,
+    title: str,
     run_id: str,
     started_at: str,
     collected_at: str,
@@ -44,6 +45,7 @@ def build_report(
     return {
         "schema": SCHEMA,
         "tool_version": __version__,
+        "title": title,
         "run_id": run_id,
         "started_at": started_at,
         "collected_at": collected_at,
@@ -77,11 +79,10 @@ def _cell(text: str) -> str:
 
 def to_markdown(report: dict[str, Any]) -> str:
     s = report["summary"]
-    t = report["target"]
     frameworks = list(report["findings"][0]["controls"]) if report["findings"] else []
     header = ["Check", "Result", *(FRAMEWORK_LABELS.get(fw, fw) for fw in frameworks), "Detail"]
     lines = [
-        f"# Branch Protection Compliance Report — `{t['repo']}@{t['branch']}`",
+        f"# {report['title']}",
         "",
         f"- **Run ID:** `{report['run_id']}`",
         f"- **Collected:** {report['collected_at']} by {report['operator']}",

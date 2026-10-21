@@ -34,3 +34,26 @@ checks:
     objectives: [PRIV-BYPASS]
     # If admins can bypass the rules, every control above has an undocumented
     # exception held by privileged users.
+
+  # Change management integrity (Module A). GH-BP-* tests how the branch is
+  # configured (design); GH-CM-* tests every change that actually merged in the
+  # audit period (operating effectiveness), which is what a SOX/SOC 2 auditor samples.
+
+  GH-CM-01:
+    title: Every merged change independently approved
+    objectives: [CHG-REVIEW, CHG-SOD]
+    # An approval on the merged commit by someone other than the author is both
+    # the approval evidence and the author/approver separation, per change.
+
+  GH-CM-02:
+    title: Every merged change passed CI
+    objectives: [CHG-TEST]
+    # Passing automated checks on the exact commit that merged is the testing
+    # evidence for that change.
+
+  GH-CM-03:
+    title: No changes reached the branch outside a pull request
+    objectives: [CHG-REVIEW, PRIV-BYPASS]
+    # A commit on the branch with no merged PR skipped review entirely. On a
+    # protected branch only a privileged user or a bypass-list actor can do that.
+
