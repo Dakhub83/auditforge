@@ -34,7 +34,6 @@ packages = ["auditforge"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-extend-exclude = ["branch_protection_check.py"]  # prototype, removed after the refactor
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -20,7 +20,8 @@ technical telemetry to SOC 2, ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, and SOX 
 4. **Status is PASS | FAIL | MANUAL_REVIEW.** If automation cannot see enough to decide, return
    MANUAL_REVIEW with what a human must check. Never guess a PASS.
 5. **Reports are signed.** Every run produces `report.json` + `report.md`, signed with Ed25519 over
-   canonical JSON. `auditforge verify` must re-check the signature and every evidence hash.
+   canonical JSON. `auditforge verify` must re-check the signature and every evidence hash, against a
+   trusted public key supplied out of band — never the key embedded in the report.
 6. **Read-only by default.** Connectors use least-privilege, read-only credentials. Never write to
    GitHub, AWS, or GCP. Never log or store tokens.
 7. **No copyrighted standard text.** Reference control IDs and short paraphrased titles only.
@@ -28,13 +29,15 @@ technical telemetry to SOC 2, ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, and SOX 
 ## SQLite schema (auditforge.db)
 - runs(run_id PK, started_at, tool_version, operator, signature)
 - evidence(evidence_id PK, run_id FK, source_uri, collected_at, sha256, file_path)
-- findings(finding_id PK, run_id FK, check_id, resource, status, detail, evidence_id FK)
+- findings(finding_id PK, run_id FK, check_id, resource, status, detail)
+- finding_evidence(finding_id FK, evidence_id FK)  — a finding can rest on several evidence items
 - controls(control_id, framework, title)  — composite PK (framework, control_id)
 - check_control_map(check_id, framework, control_id)
 - exceptions(finding_id FK, approved_by, reason, expires_at)  — risk acceptance is human-entered
 
 ## Roadmap
-- [x] `branch_protection_check.py` — GitHub classic protection + rulesets, signed report (prototype; refactor into the structure above)
+- [x] GitHub branch protection (GH-BP-01..05) — classic protection + rulesets, signed report
+      (`auditforge check github-branch-protection`; refactored from the `branch_protection_check.py` prototype)
 - [ ] Module A: Change management integrity — full-population sample of merged PRs over an audit period
       (independent approver ≠ author, CI passed, no admin bypass) → SOC 2 CC8.1, ISO A.8.32, NIST CM-3, SOX ITGC program change
 - [ ] Module B: Access review — AWS IAM, GCP IAM, GitHub org members; dormant accounts, admin sprawl, MFA gaps,
