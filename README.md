@@ -101,6 +101,16 @@ curl -s https://github.com/web-flow.gpg | gpg --import
 Without the key, GitHub merges show as MANUAL_REVIEW ("signature could not be checked");
 direct pushes are still FAIL.
 
+**GitHub Enterprise Server** signs merges with the instance's own key and committer address.
+Get both from your GitHub administrator (not from the repo being audited) and pass them;
+the report records exactly which keys were trusted:
+
+```sh
+auditforge check git-change-management --path ../payments-api \
+    --period-start 2026-01-01 --period-end 2026-03-31 \
+    --merge-key <instance key fingerprint> --merge-committer-email noreply@git.example.internal
+```
+
 The clone is treated as untrusted input: settings in its `.git/config` that would make git run
 a program (e.g. `gpg.program`) are overridden, and replace refs are ignored. A shallow clone is
 MANUAL_REVIEW (run `git fetch --unshallow`).
@@ -131,3 +141,38 @@ objectives to framework control IDs. Each report records the SHA-256 of both fil
 pytest          # all GitHub calls are mocked; tests never touch the network
 ruff check . && ruff format --check .
 ```
+
+## Risk register
+
+An Eramba-style register stored in `auditforge.db`, linked to the same controls the checks
+test. Design: [docs/risk-register.md](docs/risk-register.md).
+
+```sh
+auditforge asset add --id AST-001 --name "Customer payments database" --type data \
+    --owner "Priya Shah" --classification restricted
+auditforge risk add --title "Customer data leaked from production database" \
+    --category "Information security" --owner "Priya Shah" \
+    --likelihood 4 --impact 5 --residual-likelihood 2 --residual-impact 5 \
+    --asset AST-001:C --control SOC2:CC6.1 --control ISO27001:A.8.24
+auditforge risk update R-001 --residual-likelihood 1      # scores recalculate
+auditforge risk mitigate R-001 --description "Encrypt backups" --owner "Tom Okafor" --due 2026-11-30
+auditforge risk list                                      # register + 5x5 heat map
+```
+
+Scores are likelihood x impact on a 5x5 matrix (Low 1-4, Medium 5-9, High 10-16,
+Critical 20-25); level wording, bands, appetite and categories are in
+`mappings/risk_matrix.yaml`. `risk show` lists the latest automated evidence for each linked
+control and warns when a residual score relies on a control that is failing.
+
+## Dashboard (`auditforge view`)
+
+```sh
+auditforge view --out auditforge-view.html                 # open the file in any browser
+auditforge view --pubkey acme-operator.pub.pem             # verify runs against someone else's key
+```
+
+Writes one self-contained HTML file from `auditforge.db`: a dashboard, the risk register (5x5
+heat map, inherent-to-residual sliders, per-risk detail with controls, mitigations and history)
+and every evidence run with its tested population. The page loads nothing from the network.
+While building it, AuditForge re-verifies each run's signature and evidence hashes against the
+trusted key, and exits with code 1 if any run fails verification.

@@ -33,6 +33,7 @@ from auditforge.models import Evidence, Finding
 from auditforge.paths import default_mappings_dir, key_dir
 from auditforge.report import build_report, new_run_id, write_report
 from auditforge.risk.cli import asset_app, risk_app
+from auditforge.risk.matrix import MatrixError
 from auditforge.signing import (
     PUBLIC_KEY_FILE,
     load_or_create_key,
@@ -41,6 +42,7 @@ from auditforge.signing import (
     verify_report,
 )
 from auditforge.store import Store
+from auditforge.ui.view import write_view
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="AuditForge: signed compliance evidence.")
 check_app = typer.Typer(no_args_is_help=True, help="Collect evidence and run compliance checks.")
@@ -413,6 +415,41 @@ def verify(
     result = verify_report(report, trusted)
     typer.echo(result.message)
     raise typer.Exit(0 if result.ok else 1)
+
+
+@app.command()
+def view(
+    out: Annotated[Path, typer.Option(help="HTML file to write")] = Path("auditforge-view.html"),
+    db: Annotated[Path, typer.Option(help="SQLite database")] = Path("auditforge.db"),
+    pubkey: Annotated[
+        Path | None,
+        typer.Option(
+            help="Trusted public key for re-verifying runs. Defaults to your own key in AUDITFORGE_HOME."
+        ),
+    ] = None,
+    mappings_dir: Annotated[Path | None, typer.Option("--mappings", help="Mappings directory")] = None,
+) -> None:
+    """Write a self-contained HTML dashboard: risk register, evidence runs and their verification.
+
+    Nothing is fetched from the network, by the command or by the page.
+    """
+    if not db.is_file():
+        raise _fail(f"No database at {db}. Run a check or add a risk first.")
+    key = pubkey or key_dir() / PUBLIC_KEY_FILE
+    if pubkey is not None and not pubkey.is_file():
+        raise _fail(f"No public key at {pubkey}.")
+    try:
+        data = write_view(db, out, mappings_dir or default_mappings_dir(), key if key.is_file() else None)
+    except (MappingError, MatrixError, ValueError) as exc:
+        raise _fail(str(exc)) from None
+    verified = [r for r in data["reports"] if r["_verify"]["ok"]]
+    failed = [r["run_id"] for r in data["reports"] if r["_verify"]["ok"] is False]
+    typer.echo(
+        f"Wrote {out}: {len(data['register']['risks'])} risk(s), {len(data['reports'])} run(s), "
+        f"{len(verified)} verified"
+        + (f", {len(failed)} FAILED verification: {', '.join(failed)}" if failed else "")
+    )
+    raise typer.Exit(1 if failed else 0)
 
 
 @app.command()

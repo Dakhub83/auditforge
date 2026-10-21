@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AuditForge</title>
+<style>
+/* AuditForge theme. The first three groups are the canonical design tokens; everything else derives from them.
+   The page is self-contained: no fonts, scripts or images are fetched, so it works offline. */
+:root {
+  color-scheme: dark;
+  /* Core Canvas */
+  --bg-obsidian: #0a0f1c;
+  --panel-graphite: #141c2e;
+  --border-ink: #232f47;
+
+  /* Typography */
+  --text-primary: #f7f8fa;
+  --text-secondary: #b8bdc6;
+  --text-muted: #9aa1ab;
+
+  /* Risk Matrix States (Dark Mode Compatible) */
+  --risk-low-bg: #113b36;
+  --risk-low-text: #6eeae0;
+  --risk-med-bg: #3b2a11;
+  --risk-med-text: #ffb86c;
+  --risk-high-bg: #3b1111;
+  --risk-high-text: #ff6b6b;
+
+  /* Derived */
+  --appetite-line: var(--risk-med-text);
+  --accent: var(--risk-low-text);
+  --raised: #1a2338;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background-color: var(--bg-obsidian); color: var(--text-primary); font-family: var(--font); font-size: 14px; line-height: 1.5;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) 40px max(24px, env(safe-area-inset-left, 0px)); }
+@media (max-width: 600px) { body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); } }
+button, select { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.muted { color: var(--text-muted); }
+.wrap { max-width: 1320px; margin: 0 auto; }
+
+.header { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid var(--border-ink); margin-bottom: 24px; }
+.brand-zone { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo-shield { background: linear-gradient(135deg, #0a6d6b, var(--risk-low-text)); width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--bg-obsidian); flex: none; }
+.brand-zone h1 { font-size: 18px; font-weight: 600; }
+.brand-zone .ctx { font-size: 12px; color: var(--text-muted); border-left: 1px solid var(--border-ink); padding-left: 12px; overflow-wrap: anywhere; }
+.nav-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab { padding: 8px 16px; border-radius: 6px; color: var(--text-secondary); font-size: 14px; font-weight: 500; border: 1px solid transparent; transition: all .2s ease; }
+.tab.active { background-color: var(--panel-graphite); color: var(--text-primary); border-color: var(--border-ink); }
+.tab:hover:not(.active) { color: var(--text-primary); background-color: rgba(35, 47, 71, .4); }
+
+.metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+@media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.metric-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.metric-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; overflow-wrap: anywhere; }
+.metric-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+.card, .heat-map-container { background-color: var(--panel-graphite); border: 1px solid var(--border-ink); border-radius: 8px; padding: 20px; min-width: 0; }
+.metric-card { padding: 16px; }
+.content-layout { display: grid; grid-template-columns: 450px minmax(0, 1fr); gap: 24px; align-items: start; }
+.two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .content-layout, .two-col { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 24px; }
+.gap-top { margin-top: 24px; }
+.card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+.card-title small { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+.empty { border: 1px dashed var(--border-ink); border-radius: 8px; padding: 24px; text-align: center; color: var(--text-secondary); }
+.empty code { display: block; margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--accent); overflow-wrap: anywhere; }
+
+.seg { display: inline-flex; gap: 4px; background: var(--bg-obsidian); border: 1px solid var(--border-ink); border-radius: 6px; padding: 3px; }
+.seg button { font-size: 12px; padding: 4px 10px; border-radius: 4px; color: var(--text-secondary); }
+.seg button[aria-pressed="true"] { background: var(--panel-graphite); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-ink); }
+.select { background: var(--bg-obsidian); border: 1px solid var(--border-ink); border-radius: 6px; padding: 7px 10px; max-width: 100%; color: var(--text-primary); }
+
+/* 5x5 heat map */
+.matrix-grid { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.matrix-cell { aspect-ratio: 1.2; border-radius: 4px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; padding: 6px; font-size: 11px; font-weight: 600; position: relative; min-width: 0; }
+.matrix-axis-label { display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-secondary); padding: 0 4px; }
+.cell-low { background-color: rgba(17, 59, 54, .4); border: 1px solid rgba(110, 234, 224, .2); color: var(--risk-low-text); }
+.cell-med { background-color: rgba(59, 42, 17, .4); border: 1px solid rgba(255, 184, 108, .2); color: var(--risk-med-text); }
+.cell-high { background-color: rgba(59, 17, 17, .4); border: 1px solid rgba(255, 107, 107, .3); color: var(--risk-high-text); }
+/* Critical: the High tier at full strength, so the palette stays at three hues. */
+.cell-crit { background-color: var(--risk-high-bg); border: 1.5px solid var(--risk-high-text); color: var(--risk-high-text); }
+.matrix-cell.over::after { content: ""; position: absolute; inset: 2px; border-radius: 3px; border: 1px dashed rgba(255, 184, 108, .35); pointer-events: none; }
+.tokens { position: absolute; top: 4px; left: 4px; right: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+.token-tag { background-color: var(--bg-obsidian); padding: 2px 4px; border-radius: 3px; font-size: 9px; color: var(--text-primary); border: 1px solid var(--border-ink); font-family: var(--mono); }
+.token-tag:hover { border-color: var(--accent); color: var(--accent); }
+.matrix-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 11px; color: var(--text-muted); }
+.key { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 11px; color: var(--text-muted); }
+.key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* Risk rows with inherent -> residual sliders */
+.risk-list { display: flex; flex-direction: column; gap: 16px; }
+.risk-row { background-color: rgba(10, 15, 28, .4); border: 1px solid var(--border-ink); border-radius: 6px; padding: 14px; text-align: left; width: 100%; transition: border-color .2s ease; }
+.risk-row:hover { border-color: #33456a; }
+.risk-row-header { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
+.risk-title { font-size: 14px; font-weight: 600; }
+.risk-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+.risk-warn { font-size: 12px; color: var(--risk-high-text); margin-top: 8px; }
+.slider-container { position: relative; height: 6px; background-color: var(--border-ink); border-radius: 3px; margin: 20px 0 10px 0; }
+.slider-bar { position: absolute; height: 100%; background: linear-gradient(90deg, var(--risk-low-text), var(--risk-high-text)); border-radius: 3px; }
+.node { position: absolute; width: 12px; height: 12px; border-radius: 50%; top: -3px; transform: translateX(-50%); }
+.node-inherent { background-color: var(--risk-high-text); box-shadow: 0 0 8px var(--risk-high-text); }
+.node-residual { background-color: var(--risk-low-text); box-shadow: 0 0 8px var(--risk-low-text); }
+.appetite-marker { position: absolute; width: 2px; height: 14px; background-color: var(--appetite-line); top: -4px; }
+.legend-labels { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--text-muted); }
+
+.pill { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; display: inline-block; }
+.pill-low, .pill-PASS, .pill-ok { background-color: var(--risk-low-bg); color: var(--risk-low-text); }
+.pill-med, .pill-MANUAL_REVIEW, .pill-review { background-color: var(--risk-med-bg); color: var(--risk-med-text); }
+.pill-high, .pill-FAIL, .pill-exception { background-color: var(--risk-high-bg); color: var(--risk-high-text); }
+.pill-crit { background-color: var(--risk-high-bg); color: var(--risk-high-text); box-shadow: inset 0 0 0 1px var(--risk-high-text); }
+.pill-none { background-color: var(--raised); color: var(--text-muted); }
+.chip { font-size: 11px; color: var(--text-secondary); background: var(--raised); border: 1px solid var(--border-ink); border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
+button.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--border-ink); border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); font-weight: 600; padding: 9px 12px; background: rgba(10, 15, 28, .5); white-space: nowrap; }
+td { padding: 10px 12px; border-top: 1px solid var(--border-ink); vertical-align: top; color: var(--text-secondary); }
+td strong { color: var(--text-primary); font-weight: 600; }
+.tick { font: 700 14px/1 var(--mono); }
+.tick.ok { color: var(--risk-low-text); } .tick.exception { color: var(--risk-high-text); } .tick.review { color: var(--risk-med-text); }
+
+.scrim { position: fixed; inset: 0; background: rgba(5, 8, 15, .6); z-index: 20; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--panel-graphite); border-left: 1px solid var(--border-ink); z-index: 21; overflow-y: auto;
+  padding: calc(22px + env(safe-area-inset-top, 0px)) max(22px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) 22px; }
+.drawer h2 { font-size: 20px; font-weight: 700; margin: 6px 40px 8px 0; line-height: 1.25; }
+.close { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border-ink); font-size: 18px; color: var(--text-secondary); }
+.close:hover { color: var(--text-primary); border-color: var(--accent); }
+.sect { margin-top: 22px; }
+.sect h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); font-weight: 600; margin-bottom: 10px; }
+.scores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.score { border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-ink); }
+.score .k { font-size: 12px; color: var(--text-secondary); }
+.score .v { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.score .d { font-size: 12px; color: var(--text-secondary); }
+.score.low .v { color: var(--risk-low-text); } .score.med .v { color: var(--risk-med-text); }
+.score.high .v, .score.crit .v { color: var(--risk-high-text); } .score.crit { border-color: var(--risk-high-text); }
+.score.none .v { color: var(--text-muted); }
+.callout { border: 1px solid rgba(255, 107, 107, .35); background: rgba(59, 17, 17, .45); color: #ffc2c2; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+.items { display: grid; gap: 10px; }
+.item { background: rgba(10, 15, 28, .4); border: 1px solid var(--border-ink); border-radius: 6px; padding: 12px; display: grid; gap: 6px; text-align: left; width: 100%; }
+button.item:hover { border-color: #33456a; }
+.item-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+.item-top b { font-weight: 600; }
+.row-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.cia { display: flex; gap: 4px; }
+.cia span { font: 600 11px/1 var(--mono); padding: 4px 6px; border-radius: 4px; background: var(--bg-obsidian); color: #4f5b73; border: 1px solid var(--border-ink); }
+.cia span.on { color: var(--accent); border-color: rgba(110, 234, 224, .4); }
+.who { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.av { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, #0a6d6b, #2d8c89); color: var(--text-primary); display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+.timeline { border-left: 2px solid var(--border-ink); margin-left: 5px; }
+.tl { position: relative; padding: 0 0 12px 16px; font-size: 12.5px; color: var(--text-secondary); }
+.tl b { color: var(--text-primary); }
+.tl::before { content: ""; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg-obsidian); border: 2px solid var(--accent); }
+
+.run-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 24px; }
+.run-head h2 { font-size: 20px; font-weight: 700; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; font-size: 13px; }
+.kv dt { color: var(--text-muted); } .kv dd { color: var(--text-secondary); overflow-wrap: anywhere; }
+.seal { display: flex; gap: 12px; align-items: flex-start; }
+.seal-mark { width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; border: 1px solid; }
+.seal-mark.ok { color: var(--risk-low-text); border-color: rgba(110, 234, 224, .5); background: rgba(17, 59, 54, .5); }
+.seal-mark.bad { color: var(--risk-high-text); border-color: rgba(255, 107, 107, .5); background: rgba(59, 17, 17, .5); }
+.seal-mark.no { color: var(--text-muted); border-color: var(--border-ink); }
+.cov-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-ink); }
+.cov-row:first-of-type { border-top: 0; padding-top: 0; }
+@media (max-width: 560px) { .cov-row { grid-template-columns: minmax(0, 1fr); } }
+.ctl { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-secondary); background: rgba(10, 15, 28, .4); border: 1px solid var(--border-ink); border-radius: 4px; padding: 3px 8px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot.FAIL { background: var(--risk-high-text); box-shadow: 0 0 6px var(--risk-high-text); } .dot.MANUAL_REVIEW { background: var(--risk-med-text); } .dot.PASS { background: var(--risk-low-text); }
+.findings { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .findings { grid-template-columns: minmax(0, 1fr); } }
+.fbtn { width: 100%; text-align: left; background: rgba(10, 15, 28, .4); border: 1px solid var(--border-ink); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; }
+.fbtn + .fbtn { margin-top: 10px; }
+.fbtn[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(110, 234, 224, .25); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 10px; }
+.fchip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-ink); color: var(--text-secondary); }
+.fchip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.hash { display: flex; gap: 8px; align-items: center; }
+.hash code { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; color: var(--text-muted); }
+.copy { border: 1px solid var(--border-ink); border-radius: 4px; font-size: 11px; padding: 2px 8px; color: var(--text-secondary); flex: none; }
+.copy:hover { border-color: var(--accent); color: var(--accent); }
+.foot { margin-top: 28px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="header">
+    <div class="brand-zone"><div class="logo-shield">AF</div><h1>AuditForge</h1><span class="ctx" id="ctx"></span></div>
+    <nav class="nav-tabs" aria-label="Views">
+      <button class="tab" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="risks">Risk Register</button>
+      <button class="tab" data-view="evidence">Evidence Runs</button>
+    </nav>
+  </header>
+  <main id="view"></main>
+  <p class="foot" id="foot"></p>
+</div>
+<div id="drawer-root"></div>
+
+<script>
+const DATA = /*__AUDITFORGE_DATA__*/null;
+const REG = DATA.register, REPORTS = DATA.reports, TODAY = DATA.today;
+const FW = { "SOC2": "SOC 2", "ISO27001:2022": "ISO 27001", "NIST-800-53r5": "NIST 800-53", "SOX-ITGC": "SOX ITGC" };
+const LABEL = { PASS: "PASS", FAIL: "FAIL", MANUAL_REVIEW: "MANUAL REVIEW", ok: "OK", exception: "Exception", review: "Review" };
+const TIER = { Low: "low", Medium: "med", High: "high", Critical: "crit" };
+const OPEN_MIT = new Set(["planned", "in_progress"]);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const human = (s) => String(s ?? "").replace(/_/g, " ");
+const initials = (n) => String(n).split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+const band = (s) => REG.matrix.bands.filter((b) => s >= b.min).pop().name;
+const current = (r) => r.residual_score ?? r.inherent_score;
+const pct = (s) => ((s - 1) / 24) * 100;
+const when = (iso) => String(iso ?? "").replace("T", " ").replace(/\+00:00$/, " UTC");
+const state = { heat: "residual", run: 0, finding: null, filter: "all" };
+const openRisks = () => REG.risks.filter((r) => r.status !== "closed");
+
+function riskMetrics() {
+  const open = openRisks(), failing = new Set();
+  for (const r of open) for (const [k, hs] of Object.entries(r.control_health)) if (hs.some((h) => h.status === "FAIL")) failing.add(k);
+  const mits = open.flatMap((r) => r.mitigations).filter((m) => OPEN_MIT.has(m.status));
+  return { open, over: open.filter((r) => current(r) > REG.matrix.appetite), failing, mits, overdue: mits.filter((m) => m.due_date && m.due_date < TODAY) };
+}
+const metricCards = (cards) => `<div class="metrics-grid">${cards.map(([label, value, sub, color]) => `<div class="card metric-card"><div class="metric-label">${label}</div>
+  <div class="metric-value"${color ? ` style="color: var(${color});"` : ""}>${esc(value)}</div><div class="metric-sub">${esc(sub)}</div></div>`).join("")}</div>`;
+const empty = (text, cmd) => `<div class="empty">${esc(text)}${cmd ? `<code>${esc(cmd)}</code>` : ""}</div>`;
+
+/* ---------- Risk register ---------- */
+function heatMap(risks) {
+  const M = REG.matrix, cells = {};
+  for (const r of risks) {
+    const res = state.heat === "residual" && r.residual_score != null;
+    const li = res ? r.residual_likelihood : r.inherent_likelihood, im = res ? r.residual_impact : r.inherent_impact;
+    (cells[`${li}-${im}`] ??= []).push(r);
+  }
+  let h = '<div class="matrix-grid">';
+  for (let li = 5; li >= 1; li--) {
+    h += `<div class="matrix-axis-label" title="${esc(M.likelihood[li])}">${li}</div>`;
+    for (let im = 1; im <= 5; im++) {
+      const s = li * im, rs = cells[`${li}-${im}`] ?? [];
+      h += `<div class="matrix-cell cell-${TIER[band(s)]}${s > M.appetite ? " over" : ""}" title="${esc(M.likelihood[li])} × ${esc(M.impact[im])} = ${s} ${band(s)}">
+        <div class="tokens">${rs.map((r) => `<button class="token-tag" data-risk="${esc(r.risk_id)}" title="${esc(r.title)}">${esc(r.risk_id)}</button>`).join("")}</div>${s}</div>`;
+    }
+  }
+  h += `<div></div>${[1, 2, 3, 4, 5].map((im) => `<div class="matrix-axis-label" title="${esc(M.impact[im])}">${im}</div>`).join("")}</div>`;
+  return h + `<div class="matrix-foot"><span>↑ Likelihood (1 ${esc(M.likelihood[1])} – 5 ${esc(M.likelihood[5])})</span><span>Impact →</span></div>
+    <div class="key">${M.bands.map((b) => `<span><i class="cell-${TIER[b.name]}"></i>${b.name}</span>`).join("")}<span><i style="border:1px dashed var(--appetite-line)"></i>Above appetite</span></div>`;
+}
+
+function riskRow(r) {
+  const i = r.inherent_score, s = r.residual_score, cur = current(r);
+  return `<button class="risk-row" data-risk="${esc(r.risk_id)}">
+    <div class="risk-row-header"><span class="risk-title">${esc(r.title)}</span><span class="pill pill-${TIER[band(cur)]}">${cur} ${band(cur)}${s == null ? " (inherent)" : ""}</span></div>
+    <div class="risk-meta">${esc(r.risk_id)} · ${esc(r.category)} · ${esc(r.owner)} · ${esc(human(r.status))}</div>
+    <div class="slider-container">
+      ${s != null ? `<div class="slider-bar" style="left:${pct(s)}%;width:${Math.max(pct(i) - pct(s), 0.8)}%"></div>` : ""}
+      <div class="appetite-marker" style="left:${pct(REG.matrix.appetite + 0.5)}%" title="Appetite ${REG.matrix.appetite}"></div>
+      <div class="node node-inherent" style="left:${pct(i)}%" title="Inherent ${i}"></div>
+      ${s != null ? `<div class="node node-residual" style="left:${pct(s)}%" title="Residual ${s}"></div>` : ""}
+    </div>
+    <div class="legend-labels"><span>Residual: ${s != null ? `${s} ${band(s)}` : "not assessed"}</span><span>Appetite: ${REG.matrix.appetite}</span><span>Inherent: ${i} ${band(i)}</span></div>
+    ${r.warnings.length ? `<div class="risk-warn">⚠ ${esc(r.warnings[0])}${r.warnings.length > 1 ? ` (+${r.warnings.length - 1})` : ""}</div>` : ""}
+  </button>`;
+}
+
+function renderRisks() {
+  const m = riskMetrics();
+  $("view").innerHTML = metricCards([
+    ["Open Risks", m.open.length, `${m.open.filter((r) => r.residual_score == null).length} awaiting residual assessment`],
+    ["Above Appetite", m.over.length, `Current matrix score over ${REG.matrix.appetite}`, m.over.length ? "--risk-med-text" : null],
+    ["Controls Failing Evidence", m.failing.size, "Linked controls whose latest automated test FAILED", m.failing.size ? "--risk-high-text" : null],
+    ["Open Mitigations", m.mits.length, m.overdue.length ? `${m.overdue.length} overdue` : "None overdue / tracking normal", m.overdue.length ? "--risk-high-text" : null],
+  ]) + (REG.risks.length ? `<div class="content-layout">
+    <div class="heat-map-container"><div class="card-title"><span>Heat Map Matrix</span><small>Appetite Target: ${REG.matrix.appetite}</small></div>
+      <div class="seg" role="group" aria-label="Heat map basis"><button data-heat="residual" aria-pressed="${state.heat === "residual"}">Residual</button><button data-heat="inherent" aria-pressed="${state.heat === "inherent"}">Inherent</button></div>
+      ${heatMap(m.open)}</div>
+    <div class="card"><div class="card-title"><span>Inherent → Residual</span><small>Highest current score first · select a risk for detail</small></div>
+      <div class="risk-list">${REG.risks.map(riskRow).join("")}</div></div></div>`
+    : empty("The risk register is empty. Add an asset and a risk, then run auditforge view again.",
+        'auditforge risk add --title "…" --category "Information security" --owner "…" --likelihood 4 --impact 5'));
+}
+
+function openRisk(id) {
+  const r = REG.risks.find((x) => x.risk_id === id), M = REG.matrix;
+  const assets = Object.fromEntries(REG.assets.map((a) => [a.asset_id, a]));
+  const desc = (l, i) => `${l} ${M.likelihood[l]} × ${i} ${M.impact[i]}`;
+  $("drawer-root").innerHTML = `<div class="scrim" data-close="1"></div>
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title">
+    <button class="close" data-close="1" aria-label="Close">×</button>
+    <div class="mono muted">${esc(r.risk_id)} · ${esc(r.category)}</div>
+    <h2 id="dr-title">${esc(r.title)}</h2>
+    <div class="row-wrap"><span class="chip">${esc(human(r.status))}</span><span class="chip">Treatment: ${esc(r.treatment)}</span><span class="chip">Review by ${esc(r.review_date ?? "—")}</span>
+      <span class="who"><span class="av">${esc(initials(r.owner))}</span>${esc(r.owner)}</span></div>
+    ${r.description ? `<p style="margin-top:12px;color:var(--text-secondary)">${esc(r.description)}</p>` : ""}
+    <div class="sect scores">
+      <div class="score ${TIER[r.inherent_band]}"><div class="k">Inherent</div><div class="v">${r.inherent_score}</div><div class="d">${esc(desc(r.inherent_likelihood, r.inherent_impact))} · ${r.inherent_band}</div></div>
+      ${r.residual_score != null ? `<div class="score ${TIER[r.residual_band]}"><div class="k">Residual</div><div class="v">${r.residual_score}</div><div class="d">${esc(desc(r.residual_likelihood, r.residual_impact))} · ${r.residual_band}${r.residual_score > M.appetite ? " · above appetite" : ""}</div></div>`
+        : `<div class="score none"><div class="k">Residual</div><div class="v">—</div><div class="d">Not yet assessed</div></div>`}
+    </div>
+    ${r.warnings.map((w) => `<div class="callout">⚠ ${esc(w)}</div>`).join("")}
+    <div class="sect"><h3>Assets impacted</h3><div class="items">${r.assets.map((a) => { const x = assets[a.asset_id] ?? {}; return `<div class="item">
+      <div class="item-top"><b><span class="mono muted">${esc(a.asset_id)}</span> ${esc(x.name)}</b>
+      <span class="cia">${["confidentiality", "integrity", "availability"].map((t) => `<span class="${a.impact_types.includes(t) ? "on" : ""}" title="${t}">${t[0].toUpperCase()}</span>`).join("")}</span></div>
+      <div class="muted" style="font-size:12px">${esc(x.asset_type)} · ${esc(x.classification)} · owner ${esc(x.owner)}</div></div>`; }).join("") || '<div class="muted">None linked</div>'}</div></div>
+    <div class="sect"><h3>Mitigating controls · latest evidence</h3><div class="items">${r.controls.map((c) => { const k = `${c.framework}|${c.control_id}`, hs = r.control_health[k] ?? []; return `<div class="item">
+      <div class="item-top"><b>${esc(FW[c.framework] ?? c.framework)} ${esc(c.control_id)}</b><span class="muted" style="font-size:12px">${esc(DATA.control_titles[k] ?? "")}</span></div>
+      <div class="row-wrap">${hs.length ? hs.map((h) => `<span class="pill pill-${h.status}" title="${esc(h.run_id)}">${esc(h.check_id)} ${esc(LABEL[h.status])} · ${esc(h.resource)}</span>`).join("") : '<span class="muted" style="font-size:12px">No automated check · evidence is manual</span>'}</div></div>`; }).join("") || '<div class="muted">None linked</div>'}</div></div>
+    <div class="sect"><h3>Mitigations</h3><div class="items">${r.mitigations.map((m) => `<div class="item">
+      <div class="item-top"><b>M-${m.mitigation_id} · ${esc(m.description)}</b><span class="chip">${esc(human(m.status))}</span></div>
+      <div class="item-top"><span class="who"><span class="av">${esc(initials(m.owner))}</span>${esc(m.owner)}</span>
+      <span class="muted" style="font-size:12px">${m.due_date ? `Due ${esc(m.due_date)}${OPEN_MIT.has(m.status) && m.due_date < TODAY ? ' · <span style="color:var(--risk-high-text)">overdue</span>' : ""}` : "No due date"}</span></div></div>`).join("") || '<div class="muted">No mitigations yet</div>'}</div></div>
+    <div class="sect"><h3>History</h3><div class="timeline">${r.history.map((h) => `<div class="tl"><b>${esc(human(h.action))}</b> by ${esc(h.changed_by)} · ${esc(when(h.changed_at).slice(0, 16))}
+      <div class="muted">inherent ${h.inherent_score} · residual ${h.residual_score ?? "—"} · ${esc(human(h.status))}</div></div>`).join("")}</div></div>
+  </div>`;
+  document.querySelector(".drawer .close").focus();
+}
+const closeRisk = () => { $("drawer-root").innerHTML = ""; };
+
+/* ---------- Evidence helpers (generic over all report types) ---------- */
+const exceptionsOf = (report) => report.findings.flatMap((f) => (f.observed?.items ?? []).filter((i) => i.outcome === "exception").map((i) => ({ ...i, check_id: f.check_id })));
+const itemId = (i) => i.number != null ? `#${i.number}` : i.sha ? i.sha.slice(0, 10) : "—";
+const itemDate = (i) => String(i.merged_at ?? i.committed_at ?? "").slice(0, 10);
+const itemWho = (i) => String(i.committer ?? i.author ?? "").split(" <")[0];
+const itemText = (i) => i.title ?? i.subject ?? i.message ?? "";
+const verifyState = (r) => r._verify.ok === true ? "ok" : r._verify.ok === false ? "bad" : "no";
+
+/* ---------- Dashboard ---------- */
+function renderDashboard() {
+  const m = riskMetrics(), latest = REPORTS[0];
+  const top = [...m.open].sort((a, b) => current(b) - current(a)).slice(0, 3);
+  const exc = latest ? exceptionsOf(latest) : [];
+  const v = latest ? verifyState(latest) : "no";
+  $("view").innerHTML = metricCards([
+    ["Open Risks", m.open.length, `${m.over.length} above appetite`, m.over.length ? "--risk-med-text" : null],
+    ["Latest Evidence Run", latest ? `${latest.summary.fail} FAIL` : "None", latest ? `${latest.summary.manual_review} manual review · ${latest.run_id}` : "Run an auditforge check", latest?.summary.fail ? "--risk-high-text" : null],
+    ["Exceptions In Latest Run", exc.length, "Items that failed a population test", exc.length ? "--risk-high-text" : null],
+    ["Report Integrity", { ok: "Verified", bad: "INVALID", no: "Unverified" }[v], latest ? "Signature and evidence hashes, re-checked now" : "—", { ok: "--risk-low-text", bad: "--risk-high-text", no: null }[v]],
+  ]) + `<div class="two-col">
+    <div class="card"><div class="card-title"><span>Top risks</span><button class="chip" data-view="risks">Open register →</button></div>
+      ${top.length ? `<div class="risk-list">${top.map(riskRow).join("")}</div>` : empty("No risks recorded yet.", "auditforge risk add …")}</div>
+    <div class="stack">
+      <div class="card"><div class="card-title"><span>Exceptions in the latest run</span><button class="chip" data-view="evidence">Evidence →</button></div>
+        ${latest ? `<div class="items">${exc.slice(0, 6).map((i) => `<div class="item"><div class="item-top"><b>${esc(itemText(i) || itemId(i))}</b><span class="pill pill-exception">${esc(i.check_id)}</span></div>
+          <div class="muted" style="font-size:12px"><span class="mono">${esc(itemId(i))}</span> · ${esc(itemDate(i))} · ${esc(itemWho(i))}</div>
+          <div style="font-size:12.5px;color:var(--text-secondary)">${esc(i.note)}</div></div>`).join("") || '<div class="muted">No exceptions</div>'}</div>` : empty("No evidence runs recorded yet.", "auditforge check git-change-management --period-start … --period-end …")}</div>
+      <div class="card"><div class="card-title"><span>Risks resting on failing controls</span></div><div class="items">${m.open.filter((r) => r.warnings.some((w) => /FAILED/.test(w))).map((r) => `
+        <button class="item" data-risk="${esc(r.risk_id)}"><div class="item-top"><b>${esc(r.risk_id)} · ${esc(r.title)}</b><span class="pill pill-${TIER[band(current(r))]}">${current(r)}</span></div>
+        <div class="muted" style="font-size:12px">${esc(r.warnings.find((w) => /FAILED/.test(w)))}</div></button>`).join("") || '<div class="muted">None</div>'}</div></div>
+    </div></div>`;
+}
+
+/* ---------- Evidence runs ---------- */
+function renderEvidence() {
+  if (!REPORTS.length) { $("view").innerHTML = empty("No evidence runs in this database yet.", "auditforge check git-change-management --period-start 2026-01-01 --period-end 2026-03-31"); return; }
+  const r = REPORTS[state.run], s = r.summary, fs = r.findings, v = verifyState(r);
+  if (!fs.some((f) => f.check_id === state.finding)) state.finding = (fs.find((f) => f.status === "FAIL") ?? fs[0])?.check_id;
+  const rank = { FAIL: 3, MANUAL_REVIEW: 2, PASS: 1 }, worst = {};
+  for (const f of fs) for (const [fw, ids] of Object.entries(f.controls)) for (const id of ids) { const k = `${fw}|${id}`; if (!worst[k] || rank[f.status] > rank[worst[k]]) worst[k] = f.status; }
+  const fws = [...new Set(Object.keys(worst).map((k) => k.split("|")[0]))];
+  $("view").innerHTML = `<div class="run-head"><div><h2>${esc(r.title ?? "Evidence run")}</h2><div class="muted">${esc(r.run_id)} · collected ${esc(when(r.collected_at))} by ${esc(r.operator)}</div></div>
+      <label class="muted" style="font-size:12px">Run&nbsp;<select class="select" id="run-select">${REPORTS.map((x, i) => `<option value="${i}"${i === state.run ? " selected" : ""}>${esc(x.run_id)} · ${x.summary.fail} fail / ${x.summary.manual_review} review / ${x.summary.pass} pass</option>`).join("")}</select></label></div>
+    ${metricCards([["Fail", s.fail, "Findings with exceptions", s.fail ? "--risk-high-text" : null], ["Manual Review", s.manual_review, "Need a human decision", s.manual_review ? "--risk-med-text" : null],
+      ["Pass", s.pass, "Fully supported by evidence", s.pass ? "--risk-low-text" : null], ["Evidence Files", r.evidence.length, "Raw output, SHA-256 hashed"]])}
+    <div class="two-col">
+      <div class="card"><div class="card-title"><span>Target and parameters</span></div><dl class="kv">
+        ${Object.entries({ ...r.target, ...r.parameters }).map(([k, val]) => `<dt>${esc(human(k))}</dt><dd class="mono">${esc(Array.isArray(val) ? val.join(", ") : val)}</dd>`).join("")}
+        <dt>report.json</dt><dd class="mono">${esc(r._path)}</dd></dl></div>
+      <div class="card"><div class="seal"><div class="seal-mark ${v}">${{ ok: "✓", bad: "✗", no: "…" }[v]}</div><div>
+        <div style="font-weight:600">${{ ok: "Signature and evidence verified", bad: "Verification FAILED", no: "Not verified" }[v]}</div>
+        <div class="muted" style="font-size:12.5px">${esc(r._verify.message)}</div></div></div>
+        <div class="muted" style="font-size:12px;margin-top:12px">${esc(r.signature.algorithm)} · key ${esc(r.signature.public_key_fingerprint)} · re-checked when this page was generated</div></div>
+    </div>
+    <div class="card gap-top"><div class="card-title"><span>Control coverage</span><small>Worst result per control in this run</small></div>
+      ${fws.map((fw) => `<div class="cov-row"><b style="font-size:13px">${esc(FW[fw] ?? fw)}</b><div class="row-wrap">${Object.keys(worst).filter((k) => k.startsWith(fw + "|")).map((k) => `<span class="ctl"><span class="dot ${worst[k]}"></span><span class="mono">${esc(k.split("|")[1])}</span>${esc(DATA.control_titles[k] ?? "")}</span>`).join("")}</div></div>`).join("")}</div>
+    <div class="findings gap-top"><div>${fs.map((f) => `<button class="fbtn" data-finding="${esc(f.check_id)}" aria-pressed="${f.check_id === state.finding}">
+        <span class="item-top"><span class="mono muted">${esc(f.check_id)}</span><span class="pill pill-${f.status}">${LABEL[f.status]}</span></span><span style="font-weight:600">${esc(f.title)}</span></button>`).join("")}</div>
+      <div class="card">${findingDetail(fs.find((f) => f.check_id === state.finding))}</div></div>
+    <div class="card gap-top"><div class="card-title"><span>Evidence chain</span><small>Verify with auditforge verify report.json --pubkey &lt;operator key&gt;</small></div><div class="tablebox"><table>
+      <thead><tr><th>File</th><th>Source</th><th>Status</th><th>SHA-256</th></tr></thead><tbody>${r.evidence.map((e) => `<tr><td class="mono"><strong>${esc(e.file_path)}</strong></td>
+      <td class="mono" style="min-width:260px;overflow-wrap:anywhere">${esc(e.source_uri)}</td><td>${e.http_status != null ? "HTTP " + e.http_status : "exit " + e.exit_code}</td>
+      <td style="min-width:240px"><div class="hash"><code>${esc(e.sha256)}</code><button class="copy" data-copy="${esc(e.sha256)}">Copy</button></div></td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+function findingDetail(f) {
+  if (!f) return '<div class="muted">No findings in this run.</div>';
+  const o = f.observed ?? {}, items = o.items ?? [];
+  const counts = { all: items.length, exception: o.exceptions ?? 0, review: o.manual_review ?? 0, ok: o.ok ?? 0 };
+  const rows = items.filter((i) => state.filter === "all" || i.outcome === state.filter);
+  const tick = { ok: "✓", exception: "✗", review: "?" };
+  const head = `<div class="item-top"><span class="mono muted">${esc(f.check_id)}</span><span class="pill pill-${f.status}">${LABEL[f.status]}</span></div>
+    <div style="font-size:17px;font-weight:600;margin:6px 0 8px">${esc(f.title)}</div><p style="color:var(--text-secondary);max-width:80ch">${esc(f.detail)}</p>
+    <div class="row-wrap" style="margin-top:12px">${Object.entries(f.controls).flatMap(([fw, ids]) => ids.map((id) => `<span class="chip">${esc(FW[fw] ?? fw)} ${esc(id)}</span>`)).join("")}</div>`;
+  if (!items.length) {
+    const facts = Object.entries(o).filter(([, v]) => typeof v !== "object" || v === null);
+    return head + (facts.length ? `<div class="sect"><h3>Observed</h3><dl class="kv">${facts.map(([k, v]) => `<dt>${esc(human(k))}</dt><dd class="mono">${esc(v)}</dd>`).join("")}</dl></div>` : "");
+  }
+  return head + `<div class="filters" role="group" aria-label="Filter population">${[["all", "All"], ["exception", "Exceptions"], ["review", "Review"], ["ok", "OK"]].filter(([k]) => k === "all" || counts[k]).map(([k, l]) => `<button class="fchip" data-filter="${k}" aria-pressed="${state.filter === k}">${l} ${counts[k]}</button>`).join("")}</div>
+    <div class="tablebox"><table><thead><tr><th></th><th>Item</th><th>Date</th><th>Who</th><th>Description</th><th>Result</th></tr></thead><tbody>
+    ${rows.map((i) => `<tr><td class="tick ${i.outcome}">${tick[i.outcome] ?? ""}</td><td class="mono">${esc(itemId(i))}</td><td>${esc(itemDate(i))}</td><td>${esc(itemWho(i))}</td>
+      <td><strong>${esc(itemText(i))}</strong></td><td><span class="pill pill-${i.outcome}">${LABEL[i.outcome] ?? esc(i.outcome)}</span><div class="muted" style="font-size:12px;margin-top:4px">${esc(i.note)}</div></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+/* ---------- Shell ---------- */
+function show(view) {
+  document.querySelectorAll(".nav-tabs .tab").forEach((t) => { const on = t.dataset.view === view; t.classList.toggle("active", on); t.setAttribute("aria-current", on ? "page" : "false"); });
+  ({ dashboard: renderDashboard, risks: renderRisks, evidence: renderEvidence })[view]();
+  try { history.replaceState(null, "", "#" + view); } catch {}
+}
+
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("[data-view],[data-heat],[data-risk],[data-close],[data-finding],[data-filter],[data-copy]");
+  if (!t) return;
+  const d = t.dataset;
+  if (d.close) closeRisk();
+  else if (d.view) { closeRisk(); show(d.view); }
+  else if (d.heat) { state.heat = d.heat; renderRisks(); }
+  else if (d.risk) openRisk(d.risk);
+  else if (d.finding) { state.finding = d.finding; state.filter = "all"; renderEvidence(); }
+  else if (d.filter) { state.filter = d.filter; renderEvidence(); }
+  else if (d.copy) navigator.clipboard?.writeText(d.copy).then(() => { t.textContent = "Copied"; setTimeout(() => (t.textContent = "Copy"), 1200); }).catch(() => {});
+});
+document.addEventListener("change", (ev) => { if (ev.target.id === "run-select") { state.run = +ev.target.value; state.finding = null; state.filter = "all"; renderEvidence(); } });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeRisk(); });
+
+const latestTarget = REPORTS[0]?.target ?? {};
+$("ctx").textContent = latestTarget.repo ? `${latestTarget.repo}@${latestTarget.branch}` : latestTarget.ref ? `${latestTarget.remote || latestTarget.path} · ${latestTarget.ref}` : "Local workspace";
+$("foot").textContent = `Generated ${when(DATA.generated_at)} by AuditForge ${DATA.tool_version} from ${DATA.database}. Self-contained; nothing is loaded from the network.`;
+show(["dashboard", "evidence"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard");
+</script>
+</body>
+</html>
