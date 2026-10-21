@@ -49,7 +49,7 @@ GITHUB_WEB_FLOW_KEYS = ("B5690EEEBB952194", "4AEE18F83AFDEB23")
 # X good but signature expired, Y good but key expired (the pre-2024 web-flow key has expired).
 _GOOD_SIGNATURE = {"G", "U", "X", "Y"}
 # GitHub's default merge and squash messages carry the PR number; rebase merges carry none.
-_PR_NUMBER = re.compile(r"^Merge pull request #(\d+)\b|\(#(\d+)\)$")
+_PR_NUMBER = re.compile(r"(?:^Merge pull request #(\d+)\b)|(?:\(#(\d+)\)$)")
 
 
 @dataclass(frozen=True)
@@ -149,11 +149,12 @@ def evaluate(
     resource: str,
     period: AuditPeriod,
     trusted_keys: tuple[str, ...] = GITHUB_WEB_FLOW_KEYS,
+    merge_committer_email: str = GITHUB_MERGE_COMMITTER_EMAIL,
 ) -> list[Finding]:
     problem = _history_problem(ev)
     landed = [] if problem or ev.log is None else parse_log(ev.log.text)
     landed = [c for c in landed if period.contains(c["committed_at"])]
-    landings = [landing_result(c, trusted_keys) for c in landed]
+    landings = [landing_result(c, trusted_keys, merge_committer_email.lower()) for c in landed]
 
     evidence_ids = [o.evidence.evidence_id for o in (ev.shallow, ev.ref, ev.remote, ev.log) if o is not None]
     observed = {

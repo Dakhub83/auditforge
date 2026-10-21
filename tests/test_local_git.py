@@ -358,3 +358,30 @@ def test_cli_not_a_repo_exits_2(tmp_path: Path) -> None:
 
 def test_cli_rejects_option_like_ref(tmp_path: Path) -> None:
     assert run_cli(tmp_path, tmp_path, "--ref", "--output=x").exit_code == 2
+
+
+def test_custom_merge_key_and_committer_for_enterprise_server() -> None:
+    record = log_record(
+        committer_name="GitHub Enterprise",
+        committer_email="noreply@git.acme.internal",
+        signing_fingerprint="0" * 24 + "ABCDEF0123456789",
+        signing_key="ABCDEF0123456789",
+    )
+    findings = lg.evaluate(evidence(record), "r", PERIOD, ("ABCDEF0123456789",), "noreply@git.acme.internal")
+    assert findings[2].status is Status.PASS
+    # The same commit under github.com defaults is a direct push.
+    assert lg.evaluate(evidence(record), "r", PERIOD)[2].status is Status.FAIL
+
+
+@needs_git
+def test_cli_records_trusted_merge_keys(repo: Path, tmp_path: Path) -> None:
+    result = run_cli(repo, tmp_path, "--merge-key", "abcd ef01 2345 6789", "--merge-committer-email", "x@y")
+    assert result.exit_code == 1, result.output
+    (report_path,) = (tmp_path / "evidence").glob("*/report.json")
+    params = json.loads(report_path.read_text(encoding="utf-8"))["parameters"]
+    assert params["trusted_merge_keys"] == ["ABCDEF0123456789"]
+    assert params["merge_committer_email"] == "x@y"
+
+
+def test_cli_rejects_short_merge_key(tmp_path: Path) -> None:
+    assert run_cli(tmp_path, tmp_path, "--merge-key", "DEADBEEF").exit_code == 2

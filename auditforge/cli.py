@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import re
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any
@@ -164,6 +165,8 @@ def run_git_change_management(
     out_root: Path,
     db_path: Path,
     mappings_dir: Path,
+    merge_keys: tuple[str, ...] = local_git.GITHUB_WEB_FLOW_KEYS,
+    merge_committer_email: str = local_git.GITHUB_MERGE_COMMITTER_EMAIL,
 ) -> tuple[dict[str, Any], Path, bool]:
     """Analyse a local clone's history for the period. Makes no network calls."""
     mappings = Mappings.load(mappings_dir)
@@ -181,7 +184,9 @@ def run_git_change_management(
         remote=git.remote_url(),
         log=git.first_parent_log(resolved.text.strip(), since=period.start_iso),
     )
-    findings = local_git.evaluate(evidence, f"{repo_path.name}@{ref}", period)
+    findings = local_git.evaluate(
+        evidence, f"{repo_path.name}@{ref}", period, merge_keys, merge_committer_email
+    )
     remote = evidence.remote.text.strip() if evidence.remote.ok else None
     return _finish_run(
         title=f"Change Management Integrity Report (local clone) — `{ref}`, {period.label}",
@@ -195,7 +200,13 @@ def run_git_change_management(
             "ref": ref,
             "commit": resolved.text.strip(),
         },
-        parameters={"period_start": period.first_day, "period_end_inclusive": period.last_day},
+        parameters={
+            "period_start": period.first_day,
+            "period_end_inclusive": period.last_day,
+            # What counted as proof of a platform merge, so an auditor can judge the trust anchor.
+            "merge_committer_email": merge_committer_email,
+            "trusted_merge_keys": list(merge_keys),
+        },
         findings=findings,
         evidence=git.evidence,
         mappings=mappings,
@@ -333,6 +344,16 @@ def git_change_management(
     out: Annotated[Path, typer.Option(help="Directory for evidence/<run_id>/")] = Path("evidence"),
     db: Annotated[Path, typer.Option(help="SQLite database")] = Path("auditforge.db"),
     mappings_dir: Annotated[Path | None, typer.Option("--mappings", help="Mappings directory")] = None,
+    merge_key: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="Key ID or fingerprint that signs platform merges (repeatable). "
+            "Default: github.com's web-flow keys. Set for GitHub Enterprise Server."
+        ),
+    ] = None,
+    merge_committer_email: Annotated[
+        str, typer.Option(help="Committer email on platform-made merge commits")
+    ] = local_git.GITHUB_MERGE_COMMITTER_EMAIL,
 ) -> None:
     """Analyse a local git clone, with no network access and no token.
 
@@ -342,6 +363,10 @@ def git_change_management(
     """
     if not REF_PATTERN.match(ref):
         raise _fail(f"--ref must be a branch or ref name, got {ref!r}")
+    keys = tuple(k.replace(" ", "").upper() for k in merge_key or local_git.GITHUB_WEB_FLOW_KEYS)
+    # A long key ID is 16 hex digits; anything shorter is too easy to collide with.
+    if not all(re.fullmatch(r"[0-9A-F]{16}|[0-9A-F]{40}", k) for k in keys):
+        raise _fail("--merge-key must be a 16-hex-digit key ID or a 40-hex-digit fingerprint")
     try:
         period = cm.AuditPeriod.from_dates(date.fromisoformat(period_start), date.fromisoformat(period_end))
     except ValueError as exc:
@@ -354,6 +379,8 @@ def git_change_management(
             out_root=out,
             db_path=db,
             mappings_dir=mappings_dir or default_mappings_dir(),
+            merge_keys=keys,
+            merge_committer_email=merge_committer_email,
         )
     except (GitError, RunError, MappingError) as exc:
         raise _fail(str(exc)) from None
