@@ -1,0 +1,44 @@
+[project]
+name = "auditforge"
+dynamic = ["version"]
+description = "Local GRC evidence collection: signed, hash-verified compliance evidence mapped to SOC 2, ISO 27001, NIST 800-53 and SOX ITGC."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=42",
+    "pyyaml>=6",
+    "requests>=2.31",
+    "typer>=0.12",
+]
+
+[project.scripts]
+auditforge = "auditforge.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "responses>=0.25",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "auditforge/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["auditforge"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["branch_protection_check.py"]  # prototype, removed after the refactor
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
