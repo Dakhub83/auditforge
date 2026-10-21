@@ -57,6 +57,7 @@ frameworks:
   ISO27001:2022:
     A.8.2: Privileged access rights
     A.8.4: Access to source code
+    A.8.24: Use of cryptography
     A.8.28: Secure coding
     A.8.29: Security testing in development and acceptance
     A.8.32: Change management

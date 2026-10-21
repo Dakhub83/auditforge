@@ -1,0 +1,42 @@
+# Risk scoring method for the risk register: a 5x5 matrix.
+#
+#   score = likelihood x impact        (1..25)
+#
+# The formula is fixed (it is also enforced by the database). The wording of
+# each level, the rating bands, the risk appetite and the categories are data:
+# change them here, and every score is re-banded on the next read. Keep the
+# levels at exactly 1..5 so scores stay comparable across periods.
+
+likelihood:
+  1: {label: Rare, description: Not expected to occur within 3 years}
+  2: {label: Unlikely, description: Could occur within 3 years}
+  3: {label: Possible, description: Could occur within 12 months}
+  4: {label: Likely, description: Expected to occur within 12 months}
+  5: {label: Almost certain, description: Expected within 3 months, or already occurring}
+
+impact:
+  1: {label: Negligible, description: No customer or financial-reporting impact; under $10k}
+  2: {label: Minor, description: Limited internal disruption; $10k to $100k}
+  3: {label: Moderate, description: Customer-visible incident or reportable control deficiency; $100k to $1M}
+  4: {label: Major, description: Regulatory notification or significant deficiency; $1M to $10M}
+  5: {label: Severe, description: Material weakness, breach of restricted data, or over $10M}
+
+# Ascending; a score belongs to the highest band whose min it reaches.
+# Possible products are 1-6, 8-10, 12, 15, 16, 20 and 25.
+bands:
+  - {name: Low, min: 1}
+  - {name: Medium, min: 5}
+  - {name: High, min: 10}
+  - {name: Critical, min: 20}
+
+# Residual scores above this need a treatment plan or a recorded acceptance.
+appetite: 9
+
+categories:
+  - Information security
+  - Change management
+  - Access management
+  - Third party
+  - Operational resilience
+  - Financial reporting
+  - Privacy

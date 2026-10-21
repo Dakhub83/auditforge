@@ -6,7 +6,6 @@ Exit codes: 0 = no FAIL findings (or report VALID), 1 = at least one FAIL
 
 from __future__ import annotations
 
-import getpass
 import os
 import re
 from datetime import date
@@ -28,10 +27,12 @@ from auditforge.connectors.github import (
     GitHubResponseError,
     utc_now,
 )
+from auditforge.identity import operator
 from auditforge.mappings import MappingError, Mappings
 from auditforge.models import Evidence, Finding
 from auditforge.paths import default_mappings_dir, key_dir
 from auditforge.report import build_report, new_run_id, write_report
+from auditforge.risk.cli import asset_app, risk_app
 from auditforge.signing import (
     PUBLIC_KEY_FILE,
     load_or_create_key,
@@ -44,17 +45,12 @@ from auditforge.store import Store
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="AuditForge: signed compliance evidence.")
 check_app = typer.Typer(no_args_is_help=True, help="Collect evidence and run compliance checks.")
 app.add_typer(check_app, name="check")
+app.add_typer(risk_app, name="risk")
+app.add_typer(asset_app, name="asset")
 
 
 class RunError(RuntimeError):
     pass
-
-
-def _operator() -> str:
-    try:
-        return getpass.getuser()
-    except Exception:  # no login name available (some CI containers)
-        return "unknown"
 
 
 def run_branch_protection(
@@ -233,7 +229,7 @@ def _finish_run(
         run_id=run_id,
         started_at=started_at,
         collected_at=utc_now(),
-        operator=_operator(),
+        operator=operator(),
         target=target,
         parameters=parameters,
         findings=findings,
