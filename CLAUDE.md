@@ -12,7 +12,8 @@ technical telemetry to SOC 2, ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, and SOX 
 
 ## Architecture rules
 1. **Connectors only collect.** `auditforge/connectors/*` fetch data and save the raw response
-   unmodified to `evidence/<run_id>/raw/`, recording source URI, timestamp, HTTP status, SHA-256.
+   unmodified to `evidence/<run_id>/raw/`, recording source URI, timestamp, HTTP status (or exit
+   code for local commands), SHA-256. Local connectors treat the target (e.g. a git clone) as untrusted.
 2. **Checks are pure functions.** `auditforge/checks/*` take raw evidence and return `Finding`
    objects. No network calls inside checks.
 3. **Mappings are data, not code.** Check → internal control objective in `mappings/checks.yaml`;
@@ -38,8 +39,13 @@ technical telemetry to SOC 2, ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, and SOX 
 ## Roadmap
 - [x] GitHub branch protection (GH-BP-01..05) — classic protection + rulesets, signed report
       (`auditforge check github-branch-protection`; refactored from the `branch_protection_check.py` prototype)
-- [ ] Module A: Change management integrity — full-population sample of merged PRs over an audit period
-      (independent approver ≠ author, CI passed, no admin bypass) → SOC 2 CC8.1, ISO A.8.32, NIST CM-3, SOX ITGC program change
+- [x] Module A: Change management integrity (GH-CM-01..03) — full population of merged PRs over an audit period
+      (independent approver ≠ author on the merged commit, CI passed, no commits landed outside a PR)
+      → SOC 2 CC8.1, ISO A.8.32, NIST CM-3, SOX ITGC program change (`auditforge check github-change-management`)
+      Follow-ups: detect approvers who also pushed to the PR; org audit log for pushes/bypasses (Enterprise only)
+- [x] Local-only mode (GIT-CM-01..03) — `auditforge check git-change-management` reads a local clone, no network.
+      Direct pushes are decidable (GitHub web-flow signature); approvals/CI are MANUAL_REVIEW with the population.
+      Follow-ups: GitHub Enterprise Server committer/key; signed-commit check (GH-BP-04 analogue) from git
 - [ ] Module B: Access review — AWS IAM, GCP IAM, GitHub org members; dormant accounts, admin sprawl, MFA gaps,
       orphans vs. HR roster CSV → SOC 2 CC6.1–CC6.3, ISO A.5.15/A.5.18/A.8.2, NIST AC-2/AC-6
 - [ ] Module C: Config baseline drift — snapshot + diff security settings per run → SOC 2 CC7.1, ISO A.8.9, NIST CM-2/CM-6
