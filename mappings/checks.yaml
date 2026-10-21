@@ -57,3 +57,23 @@ checks:
     # A commit on the branch with no merged PR skipped review entirely. On a
     # protected branch only a privileged user or a bypass-list actor can do that.
 
+  # Change management from a local git clone (no API). Same control intent as
+  # GH-CM-*, but git only records what landed and who committed it, so approval
+  # and CI (GIT-CM-01/02) are always MANUAL_REVIEW with the population to check.
+
+  GIT-CM-01:
+    title: Every merged change independently approved (local clone)
+    objectives: [CHG-REVIEW, CHG-SOD]
+    # Same objectives as GH-CM-01; git cannot evidence them, so the finding hands
+    # the reviewer the full population of landed changes to check in GitHub.
+
+  GIT-CM-02:
+    title: Every merged change passed CI (local clone)
+    objectives: [CHG-TEST]
+    # Same objective as GH-CM-02; CI results are not stored in git.
+
+  GIT-CM-03:
+    title: No changes reached the branch outside a pull request (local clone)
+    objectives: [CHG-REVIEW, PRIV-BYPASS]
+    # A landed commit not created and signed by GitHub's merge was pushed directly,
+    # skipping review; on a protected branch that takes a privileged bypass.

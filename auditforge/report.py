@@ -73,6 +73,12 @@ def build_report(
     }
 
 
+def _source_status(e: dict[str, Any]) -> str:
+    if e.get("http_status") is not None:
+        return f"HTTP {e['http_status']}"
+    return f"exit {e.get('exit_code')}"
+
+
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
@@ -100,10 +106,10 @@ def to_markdown(report: dict[str, Any]) -> str:
             f["detail"],
         ]
         lines.append("| " + " | ".join(_cell(c) for c in cells) + " |")
-    lines += ["", "## Evidence", "", "| File | Source | HTTP | SHA-256 |", "|---|---|---|---|"]
+    lines += ["", "## Evidence", "", "| File | Source | Status | SHA-256 |", "|---|---|---|---|"]
     for e in report["evidence"]:
         lines.append(
-            f"| `{e['file_path']}` | {e['source_uri']} | {e['http_status']} | `{e['sha256'][:16]}…` |"
+            f"| `{e['file_path']}` | {e['source_uri']} | {_source_status(e)} | `{e['sha256'][:16]}…` |"
         )
     sig = report["signature"]
     lines += [

@@ -17,7 +17,9 @@ import typer
 
 from auditforge import __version__
 from auditforge.checks import change_management as cm
+from auditforge.checks import local_git
 from auditforge.checks.branch_protection import evaluate
+from auditforge.connectors.git import REF_PATTERN, GitConnector, GitError
 from auditforge.connectors.github import (
     REPO_PATTERN,
     GitHubAuthError,
@@ -154,6 +156,53 @@ def run_change_management(
     )
 
 
+def run_git_change_management(
+    *,
+    repo_path: Path,
+    ref: str,
+    period: cm.AuditPeriod,
+    out_root: Path,
+    db_path: Path,
+    mappings_dir: Path,
+) -> tuple[dict[str, Any], Path, bool]:
+    """Analyse a local clone's history for the period. Makes no network calls."""
+    mappings = Mappings.load(mappings_dir)
+    started_at = utc_now()
+    run_id = new_run_id()
+    run_dir = out_root / run_id
+    git = GitConnector(repo_path, run_dir)
+
+    resolved = git.resolve(ref)
+    if not resolved.ok:
+        raise RunError(f"Could not resolve {ref!r} in {git.repo_path}: {resolved.error}")
+    evidence = local_git.GitEvidence(
+        shallow=git.is_shallow(),
+        ref=resolved,
+        remote=git.remote_url(),
+        log=git.first_parent_log(resolved.text.strip(), since=period.start_iso),
+    )
+    findings = local_git.evaluate(evidence, f"{repo_path.name}@{ref}", period)
+    remote = evidence.remote.text.strip() if evidence.remote.ok else None
+    return _finish_run(
+        title=f"Change Management Integrity Report (local clone) — `{ref}`, {period.label}",
+        run_id=run_id,
+        run_dir=run_dir,
+        started_at=started_at,
+        target={
+            "platform": "git",
+            "path": str(git.repo_path),
+            "remote": remote or "",
+            "ref": ref,
+            "commit": resolved.text.strip(),
+        },
+        parameters={"period_start": period.first_day, "period_end_inclusive": period.last_day},
+        findings=findings,
+        evidence=git.evidence,
+        mappings=mappings,
+        db_path=db_path,
+    )
+
+
 def _finish_run(
     *,
     title: str,
@@ -270,6 +319,44 @@ def github_change_management(
         raise _fail(str(exc)) from None
     except requests.RequestException as exc:
         raise _fail(f"Could not reach GitHub: {type(exc).__name__}") from None
+    _announce(report, run_dir, key_created)
+
+
+@check_app.command("git-change-management")
+def git_change_management(
+    period_start: Annotated[str, typer.Option(help="First day of the audit period, YYYY-MM-DD (UTC)")],
+    period_end: Annotated[str, typer.Option(help="Last day of the audit period, inclusive, YYYY-MM-DD")],
+    repo_path: Annotated[
+        Path, typer.Option("--path", help="Local git clone", exists=True, file_okay=False)
+    ] = Path("."),
+    ref: Annotated[str, typer.Option(help="Branch to analyse, as of the clone's last fetch")] = "origin/main",
+    out: Annotated[Path, typer.Option(help="Directory for evidence/<run_id>/")] = Path("evidence"),
+    db: Annotated[Path, typer.Option(help="SQLite database")] = Path("auditforge.db"),
+    mappings_dir: Annotated[Path | None, typer.Option("--mappings", help="Mappings directory")] = None,
+) -> None:
+    """Analyse a local git clone, with no network access and no token.
+
+    Finds commits that reached the branch without a GitHub merge. Approvals and CI are not
+    stored in git, so those checks list the changes for a human to confirm. Run `git fetch`
+    first; the clone is analysed as it is.
+    """
+    if not REF_PATTERN.match(ref):
+        raise _fail(f"--ref must be a branch or ref name, got {ref!r}")
+    try:
+        period = cm.AuditPeriod.from_dates(date.fromisoformat(period_start), date.fromisoformat(period_end))
+    except ValueError as exc:
+        raise _fail(f"Bad audit period: {exc}") from None
+    try:
+        report, run_dir, key_created = run_git_change_management(
+            repo_path=repo_path,
+            ref=ref,
+            period=period,
+            out_root=out,
+            db_path=db,
+            mappings_dir=mappings_dir or default_mappings_dir(),
+        )
+    except (GitError, RunError, MappingError) as exc:
+        raise _fail(str(exc)) from None
     _announce(report, run_dir, key_created)
 
 
