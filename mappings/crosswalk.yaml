@@ -1,0 +1,58 @@
+# Internal control objective -> framework control IDs, plus a catalog of the
+# control IDs used, with short paraphrased titles (no standard text is reproduced).
+#
+# SOX-ITGC IDs are AuditForge labels for the common ITGC domains (program
+# change, access to programs and data); SOX itself does not number controls.
+
+objectives:
+  CHG-REVIEW:
+    title: Code changes are reviewed and approved before they reach a protected branch
+    controls:
+      SOC2: [CC8.1]
+      ISO27001:2022: [A.8.32]
+      NIST-800-53r5: [CM-3]
+      SOX-ITGC: [ITGC-PC]
+
+  CHG-SOD:
+    title: The approver of a change is independent of its author
+    controls:
+      # A.8.4 covers who may change source code; AC-5 is separation of duties.
+      ISO27001:2022: [A.8.4]
+      NIST-800-53r5: [AC-5]
+      SOX-ITGC: [ITGC-PC]
+
+  CODE-INTEGRITY:
+    title: Committed code is attributable to a verified identity and protected from tampering
+    controls:
+      SOC2: [CC8.1]
+      ISO27001:2022: [A.8.4, A.8.28]
+      NIST-800-53r5: [SI-7]
+      SOX-ITGC: [ITGC-PC]
+
+  PRIV-BYPASS:
+    title: Privileged users cannot bypass change controls
+    controls:
+      # CC6.1 / A.8.2 cover restricting privileged access; CM-5 restricts who
+      # can make changes; AC-5 because a bypassing admin defeats separation of duties.
+      SOC2: [CC6.1, CC8.1]
+      ISO27001:2022: [A.8.2, A.8.32]
+      NIST-800-53r5: [AC-5, CM-5]
+      SOX-ITGC: [ITGC-PC, ITGC-APD]
+
+frameworks:
+  SOC2:
+    CC6.1: Logical access security over protected information assets
+    CC8.1: Changes are authorized, designed, tested, approved and implemented
+  ISO27001:2022:
+    A.8.2: Privileged access rights
+    A.8.4: Access to source code
+    A.8.28: Secure coding
+    A.8.32: Change management
+  NIST-800-53r5:
+    AC-5: Separation of duties
+    CM-3: Configuration change control
+    CM-5: Access restrictions for change
+    SI-7: Software, firmware and information integrity
+  SOX-ITGC:
+    ITGC-PC: Program change management
+    ITGC-APD: Access to programs and data

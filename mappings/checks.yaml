@@ -1,0 +1,36 @@
+# Check -> internal control objective(s).
+#
+# A check tests one technical setting. An objective is the control intent that
+# setting supports. Framework control IDs live only in crosswalk.yaml, so a
+# framework update never requires touching check code.
+
+checks:
+  GH-BP-01:
+    title: Changes require a pull request
+    objectives: [CHG-REVIEW]
+    # Blocking direct pushes forces every change through a reviewable PR, which
+    # is the point where authorization and approval can be evidenced.
+
+  GH-BP-02:
+    title: Minimum approving reviews before merge
+    objectives: [CHG-REVIEW, CHG-SOD]
+    # A required approval is the approval step itself, and because GitHub does
+    # not let authors approve their own PR it also gives author/approver separation.
+
+  GH-BP-03:
+    title: Stale approvals dismissed on new commits
+    objectives: [CHG-REVIEW]
+    # Without dismissal, code pushed after approval merges unreviewed, so the
+    # approval no longer covers what was deployed.
+
+  GH-BP-04:
+    title: Signed commits required
+    objectives: [CODE-INTEGRITY]
+    # Signatures bind each commit to a verified identity and detect tampering
+    # with commit contents; this is integrity, not approval.
+
+  GH-BP-05:
+    title: Protection enforced for administrators
+    objectives: [PRIV-BYPASS]
+    # If admins can bypass the rules, every control above has an undocumented
+    # exception held by privileged users.
