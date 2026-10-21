@@ -1,0 +1,19 @@
+# Secrets - never commit tokens or signing keys
+.env
+.env.*
+*.pem
+keys/
+
+# Generated output
+reports/
+evidence/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+*.egg-info/
