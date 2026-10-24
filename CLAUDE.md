@@ -34,10 +34,14 @@ technical telemetry to SOC 2, ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, and SOX 
 - finding_evidence(finding_id FK, evidence_id FK)  — a finding can rest on several evidence items
 - controls(control_id, framework, title)  — composite PK (framework, control_id)
 - check_control_map(check_id, framework, control_id)
-- exceptions(finding_id FK, approved_by, reason, expires_at)  — risk acceptance is human-entered
 - Risk register (design: docs/risk-register.md; DDL: auditforge/risk/register.py):
   assets, risks (scores are generated columns L×I; residual ≤ inherent), risk_assets (C/I/A),
   risk_controls (FK → controls), mitigations, risk_history (append-only via triggers)
+- attestations (auditforge/gap/attest.py): manual control tests, hashed evidence, expiry; append-only
+- finding_exceptions + exception_revocations (auditforge/workpaper/exceptions.py): approved, expiring
+  acceptance of a check on a resource; replaced the old unused `exceptions` table; append-only
+- signoffs (auditforge/workpaper/signoff.py): preparer/reviewer bound to a report's payload hash; append-only
+- Human-entered tables are never signed; their integrity comes from constraints + append-only triggers.
 
 ## Roadmap
 - [x] GitHub branch protection (GH-BP-01..05) — classic protection + rulesets, signed report
@@ -52,9 +56,21 @@ technical telemetry to SOC 2, ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, and SOX 
       Follow-up: signed-commit check (GH-BP-04 analogue) from git
 - [x] Risk register (Eramba-style) — `auditforge asset|risk ...`: 5x5 inherent/residual scoring
       (method in mappings/risk_matrix.yaml), assets with C/I/A impact, links to catalog controls,
-      mitigations with owners, append-only history; flags residual scores resting on FAILing controls
+      mitigations with owners, append-only history; flags residual scores resting on FAILing controls.
+      `risk export` → CSV sheet (stdlib; XLSX would need openpyxl — ask first)
 - [x] UI: `auditforge view` — one self-contained HTML file (no network) with dashboard, risk register and
       evidence runs; re-verifies every run's signature + evidence hashes at build time. Theme tokens: auditforge/ui/template.html
+- [x] Gap assessment — `auditforge scope init`, `attest add`, `gap`: SoA scope file, manual attestations,
+      status per control (failing / needs review / no evidence / accepted / covered), P1–P4 ranking and
+      S–XL effort from mappings/gap_method.yaml; signed gap report. Catalog: SOC 2 CC1–CC9, ISO Annex A (93),
+      SOX ITGC (4), NIST controls in use
+- [x] IaC scanning by import — `auditforge check iac`: Checkov JSON / SARIF → IAC-* families via
+      mappings/iac_rules.yaml (explicit IDs verified only from memory; check against `checkov --list`)
+- [x] Workpaper controls — `auditforge exception` (approved, expiring, no self-approval) and
+      `auditforge signoff` (preparer → independent reviewer, bound to report content)
+- [x] Remediation drafts — `auditforge remediate`: Terraform, Rego (conftest) and evidence scripts from
+      auditforge/remediation/templates; never applied. Terraform/Rego not yet validated with terraform/opa
+- Decision 2026-10-22: AWS/GCP/Okta collectors are out of scope (local-only); don't re-propose
 - [ ] Module B: Access review — AWS IAM, GCP IAM, GitHub org members; dormant accounts, admin sprawl, MFA gaps,
       orphans vs. HR roster CSV → SOC 2 CC6.1–CC6.3, ISO A.5.15/A.5.18/A.8.2, NIST AC-2/AC-6
 - [ ] Module C: Config baseline drift — snapshot + diff security settings per run → SOC 2 CC7.1, ISO A.8.9, NIST CM-2/CM-6

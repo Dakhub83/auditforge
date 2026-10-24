@@ -1,0 +1,7 @@
+
+# @{address}: @{rule}
+resource "aws_s3_bucket_logging" "@{name}" {
+  bucket        = aws_s3_bucket.@{name}.id
+  target_bucket = var.access_log_bucket_id
+  target_prefix = "s3/@{name}/"
+}

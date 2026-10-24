@@ -24,6 +24,8 @@ from auditforge.risk.matrix import RiskMatrix
 from auditforge.risk.register import RiskRegister
 from auditforge.signing import load_public_key, verify_report
 from auditforge.store import Store
+from auditforge.workpaper.exceptions import Exceptions
+from auditforge.workpaper.signoff import Signoffs
 
 TEMPLATE = "template.html"
 PLACEHOLDER = "/*__AUDITFORGE_DATA__*/null"
@@ -38,8 +40,9 @@ def report_paths(conn: sqlite3.Connection) -> list[Path]:
     return [Path(evidence_file).parent.parent / "report.json" for _, evidence_file in rows]
 
 
-def _reports(conn: sqlite3.Connection, pubkey: Path | None) -> list[dict[str, Any]]:
+def _reports(conn: sqlite3.Connection, pubkey: Path | None, today: str) -> list[dict[str, Any]]:
     trusted = load_public_key(pubkey) if pubkey and pubkey.is_file() else None
+    signoffs, exceptions = Signoffs(conn), Exceptions(conn)
     reports = []
     for path in report_paths(conn):
         if not path.is_file():
@@ -51,8 +54,21 @@ def _reports(conn: sqlite3.Connection, pubkey: Path | None) -> list[dict[str, An
             result = verify_report(path, trusted)
             report["_verify"] = {"ok": result.ok, "message": result.message}
         report["_path"] = str(path)
+        _add_workpaper_state(report, signoffs, exceptions, today)
         reports.append(report)
     return reports
+
+
+def _add_workpaper_state(
+    report: dict[str, Any], signoffs: Signoffs, exceptions: Exceptions, today: str
+) -> None:
+    """Sign-offs and active exceptions, added beside the signed content (keys start with _), never into it."""
+    report["_signoffs"] = [
+        asdict(s) for s in signoffs.for_report(report["run_id"], report["signature"]["payload_sha256"])
+    ]
+    for f in report["findings"]:
+        exc = exceptions.active(f["check_id"], f["resource"], today) if f["status"] != "PASS" else None
+        f["_exception"] = exc.describe() if exc else None
 
 
 def _register(reg: RiskRegister) -> dict[str, Any]:
@@ -94,11 +110,11 @@ def build_data(
 ) -> dict[str, Any]:
     mappings = Mappings.load(mappings_dir)
     matrix = RiskMatrix.load(mappings_dir)
+    generated = now or datetime.now(UTC)
     with Store(db) as store:
         store.sync_mappings(mappings)
         register = _register(RiskRegister(store.conn, matrix))
-        reports = _reports(store.conn, pubkey)
-    generated = now or datetime.now(UTC)
+        reports = _reports(store.conn, pubkey, generated.date().isoformat())
     return {
         "generated_at": generated.isoformat(timespec="seconds"),
         "today": generated.date().isoformat(),

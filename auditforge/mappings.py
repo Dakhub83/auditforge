@@ -86,3 +86,19 @@ class Mappings:
             for framework, controls in self.frameworks.items()
             for control_id, title in controls.items()
         ]
+
+
+IAC_RULES_FILE = "iac_rules.yaml"
+
+
+def load_iac_rules(directory: Path, mappings: Mappings) -> dict[str, Any]:
+    """Scanner rule -> IAC-* family rules, validated against the checks in checks.yaml."""
+    rules: dict[str, Any] = yaml.safe_load((directory / IAC_RULES_FILE).read_bytes()) or {}
+    families = list(rules.get("families") or {})
+    referenced = {rules.get("fallback"), *families, *(rules.get("rules") or {}).values()}
+    unknown = sorted(str(f) for f in referenced if f not in mappings.checks)
+    if unknown:
+        raise MappingError(
+            f"{IAC_RULES_FILE} references families with no entry in checks.yaml: {', '.join(unknown)}"
+        )
+    return rules

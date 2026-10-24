@@ -1,8 +1,8 @@
 """SQLite store (auditforge.db): an index of runs, evidence and findings.
 
 The signed report.json is the record of truth; this database makes runs
-queryable across time. The exceptions table is for human-entered risk
-acceptance and is never written by the tool.
+queryable across time. Human-entered records (risk register, attestations,
+finding exceptions, sign-offs) live in their own modules' tables.
 """
 
 from __future__ import annotations
@@ -56,12 +56,6 @@ CREATE TABLE IF NOT EXISTS check_control_map (
     control_id TEXT NOT NULL,
     PRIMARY KEY (check_id, framework, control_id),
     FOREIGN KEY (framework, control_id) REFERENCES controls(framework, control_id)
-);
-CREATE TABLE IF NOT EXISTS exceptions (
-    finding_id  TEXT NOT NULL REFERENCES findings(finding_id),
-    approved_by TEXT NOT NULL,
-    reason      TEXT NOT NULL,
-    expires_at  TEXT NOT NULL
 );
 """
 
@@ -147,3 +141,28 @@ class Store:
                 "INSERT INTO finding_evidence (finding_id, evidence_id) VALUES (?, ?)",
                 [(f["finding_id"], ev) for f in report["findings"] for ev in f["evidence_ids"]],
             )
+
+
+def latest_control_results(conn: sqlite3.Connection, framework: str, control_id: str) -> list[dict[str, str]]:
+    """Latest automated result per check and per resource that evidences a framework control.
+
+    Latest is per resource: a newer run against a different repo or branch says nothing about
+    this one, so it must not hide an older FAIL. Empty if no check maps to the control.
+    """
+    rows = conn.execute(
+        """
+        SELECT f.check_id, f.resource, f.status, r.run_id, r.started_at
+        FROM findings f
+        JOIN runs r USING (run_id)
+        JOIN check_control_map m ON m.check_id = f.check_id
+        WHERE m.framework = ? AND m.control_id = ?
+          AND r.started_at = (
+              SELECT MAX(r2.started_at) FROM findings f2 JOIN runs r2 USING (run_id)
+              WHERE f2.check_id = f.check_id AND f2.resource = f.resource)
+        ORDER BY f.resource, f.check_id
+        """,
+        (framework, control_id),
+    )
+    return [
+        {"check_id": c, "resource": res, "status": s, "run_id": run, "at": at} for c, res, s, run, at in rows
+    ]

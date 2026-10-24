@@ -115,6 +115,77 @@ The clone is treated as untrusted input: settings in its `.git/config` that woul
 a program (e.g. `gpg.program`) are overridden, and replace refs are ignored. A shallow clone is
 MANUAL_REVIEW (run `git fetch --unshallow`).
 
+## Infrastructure as code (Terraform, CloudFormation, Kubernetes)
+
+AuditForge does not run scanners; it imports what they report, unmodified and hashed. Run any
+scanner that emits Checkov JSON or SARIF 2.1.0 (Checkov, tfsec, KICS, kube-linter, Trivy, ...):
+
+```sh
+checkov -d infra/ -o json > checkov.json
+kube-linter lint k8s/ --format sarif > kube.sarif
+auditforge check iac --results checkov.json --results kube.sarif --target payments-infra
+```
+
+Each result lands in a control family (IAC-ENC encryption, IAC-NET exposure, IAC-LOG logging,
+IAC-BAK recovery, IAC-PRIV least privilege, IAC-CFG baseline) by `mappings/iac_rules.yaml`:
+an explicit rule ID first, then keywords, then the baseline fallback. Each item in the report says
+which rule placed it there. Suppressed or skipped rules are MANUAL_REVIEW items with their reason.
+
+## Gap assessment
+
+```sh
+auditforge scope init --framework SOC2 --framework ISO27001:2022   # writes scope.yaml
+# edit scope.yaml: exclusions (with justification) and owners
+auditforge attest add --control ISO27001:A.6.3 --result pass \
+    --procedure "Reconciled LMS completions to HR roster" --evidence training.csv
+auditforge gap --scope scope.yaml
+```
+
+The catalog covers SOC 2 Common Criteria (33), all 93 ISO 27001:2022 Annex A controls, the NIST
+800-53 controls AuditForge maps, and the four SOX ITGC domains. For every in-scope control the
+gap report combines the latest automated findings, manual attestations and finding exceptions:
+
+| Status | Meaning |
+|---|---|
+| Failing | an automated FAIL, or a FAIL attestation (a manual PASS cannot override an automated FAIL) |
+| Needs review | automation reached MANUAL_REVIEW and no later attestation resolves it |
+| No evidence | nothing automated, no valid attestation (expired ones are noted) |
+| Accepted | the only problems are covered by an active, approved exception |
+| Covered | all automated results PASS, or a valid PASS attestation |
+
+Gaps are ranked P1-P4 by gap type plus the highest linked risk score, sized S/M/L/XL, and grouped
+with other gaps that share a control objective ("close together with"). Weights, tiers and sizes are
+in `mappings/gap_method.yaml`. The report (`gap/<run_id>/gap-report.json` + `.md`) is signed and
+carries the scope file and every attestation evidence file, so `auditforge verify` re-checks them.
+Attestations are append-only and expire (default one year).
+
+## Exceptions and sign-off
+
+```sh
+auditforge exception add --check GIT-CM-03 --resource payments-api@origin/main \
+    --reason "Emergency hotfix process with post-review (SEC-12)" --approved-by "Dana (CISO)" \
+    --expires 2027-01-31 --risk R-002
+auditforge signoff add evidence/<run_id>/report.json --role preparer --note "Tested full population"
+auditforge signoff add evidence/<run_id>/report.json --role reviewer      # a different person
+```
+
+An exception accepts a failing check on one resource until it expires (at most a year), carries over
+to later runs, cannot be approved by the person recording it, and can be revoked. Sign-offs bind to
+the exact signed report content, require a verified report, and a reviewer must differ from the
+preparer. Both are append-only and appear in `auditforge view`.
+
+## Remediation drafts
+
+```sh
+auditforge remediate evidence/<run_id>/report.json
+```
+
+Writes drafts for every FAIL or MANUAL_REVIEW finding to `remediation/<run_id>/`: Terraform
+(GitHub branch protection, S3 encryption/logging/versioning), policy as code for conftest/OPA
+(branch protection, encryption, network exposure, Kubernetes privilege) and a Python evidence script
+for PR approvals and CI. Each file names the run and check that produced it. **AuditForge never
+applies a change**: review, test and merge drafts through your change process, then re-run the check.
+
 ## Verifying a report
 
 The first run creates a signing key in `~/.auditforge/keys/` (override with `AUDITFORGE_HOME`).
@@ -157,7 +228,13 @@ auditforge risk add --title "Customer data leaked from production database" \
 auditforge risk update R-001 --residual-likelihood 1      # scores recalculate
 auditforge risk mitigate R-001 --description "Encrypt backups" --owner "Tom Okafor" --due 2026-11-30
 auditforge risk list                                      # register + 5x5 heat map
+auditforge risk export --out risk-register.csv            # spreadsheet, one row per risk
 ```
+
+`risk export` writes a CSV that opens in Excel: scores and bands, appetite, assets with C/I/A,
+linked controls with their latest automated result, mitigations and warnings. It is a snapshot;
+`auditforge.db` with its history stays the record. Cells that would run as a spreadsheet formula
+are prefixed with `'`.
 
 Scores are likelihood x impact on a 5x5 matrix (Low 1-4, Medium 5-9, High 10-16,
 Critical 20-25); level wording, bands, appetite and categories are in

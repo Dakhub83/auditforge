@@ -9,6 +9,7 @@ import pytest
 from auditforge.mappings import Mappings
 from auditforge.paths import default_mappings_dir
 from auditforge.store import Store
+from auditforge.workpaper.exceptions import Exceptions
 
 
 def report(run_id: str = "run-1") -> dict[str, Any]:
@@ -105,5 +106,12 @@ def test_sync_mappings_idempotent(store: Store) -> None:
     assert ("NIST-800-53r5", "CM-5") in rows and ("SOC2", "CC6.1") in rows
 
 
-def test_exceptions_table_exists_and_is_empty(store: Store) -> None:
-    assert count(store, "exceptions") == 0
+def test_unused_legacy_exceptions_table_is_replaced(store: Store) -> None:
+    # Databases created before finding exceptions existed have an empty `exceptions` table.
+    store.conn.execute(
+        "CREATE TABLE exceptions (finding_id TEXT, approved_by TEXT, reason TEXT, expires_at TEXT)"
+    )
+    Exceptions(store.conn)
+    tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "exceptions" not in tables
+    assert count(store, "finding_exceptions") == 0

@@ -1,0 +1,44 @@
+# Which control family (an IAC-* check in checks.yaml) a scanner rule belongs to.
+#
+# AuditForge does not run scanners; it imports their output (Checkov JSON, or SARIF
+# 2.1.0 from Checkov, tfsec, KICS, kube-linter, Trivy, ...). For each result:
+#   1. an explicit entry under `rules` wins;
+#   2. otherwise the first family whose keyword appears in the rule's name or
+#      description (case-insensitive), checked in the order listed;
+#   3. otherwise the `fallback` family.
+# Every family appears in the report with the rule that put each result there, so a
+# reviewer can challenge a classification and fix it here.
+
+fallback: IAC-CFG
+
+families:
+  # Order matters: "public access block" is about exposure, not configuration in general.
+  IAC-NET:
+    keywords: [public, 0.0.0.0, "::/0", ingress, internet, exposed, port 22, port 3389, ssh, rdp, security group,
+               firewall, network policy, host network, hostport]
+  IAC-ENC:
+    keywords: [encrypt, kms, cmk, tls, ssl, https, certificate, cipher, at rest, in transit]
+  IAC-LOG:
+    keywords: [logging, log file, logs, cloudtrail, audit, flow log, monitoring, trace]
+  IAC-BAK:
+    keywords: [backup, versioning, snapshot, retention, deletion protection, point in time, multi-az, replication,
+               recovery]
+  IAC-PRIV:
+    keywords: [privileged, privilege escalation, root, admin, wildcard, "*:*", iam policy, capabilit, run as,
+               service account, least privilege, assume role]
+
+# Explicit rule IDs. These Checkov IDs are well established, but IDs can change between
+# scanner versions: check them against `checkov --list` for the version you run.
+rules:
+  CKV_AWS_19: IAC-ENC   # S3 bucket encrypted at rest
+  CKV_AWS_16: IAC-ENC   # RDS storage encrypted
+  CKV_AWS_7: IAC-ENC    # KMS key rotation enabled
+  CKV_AWS_20: IAC-NET   # S3 bucket not publicly readable via ACL
+  CKV_AWS_17: IAC-NET   # RDS instance not publicly accessible
+  CKV_AWS_24: IAC-NET   # no security group ingress from 0.0.0.0/0 to port 22
+  CKV_AWS_25: IAC-NET   # no security group ingress from 0.0.0.0/0 to port 3389
+  CKV_AWS_18: IAC-LOG   # S3 bucket access logging
+  CKV_AWS_36: IAC-LOG   # CloudTrail log file validation
+  CKV_AWS_21: IAC-BAK   # S3 bucket versioning
+  CKV_K8S_16: IAC-PRIV  # container not privileged
+  CKV_K8S_20: IAC-PRIV  # containers do not allow privilege escalation

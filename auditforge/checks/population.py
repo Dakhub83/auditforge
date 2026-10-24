@@ -8,6 +8,7 @@ any item is an exception, MANUAL_REVIEW if any needs review, and PASS only if ev
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -16,6 +17,7 @@ from auditforge.models import Status
 
 OK, EXCEPTION, REVIEW = "ok", "exception", "review"
 MAX_LISTED = 10  # items named in a finding's detail; the full list is in observed
+SHA = re.compile(r"[0-9a-f]{40}")
 
 
 def parse_ts(timestamp: str) -> datetime:
@@ -64,8 +66,13 @@ class ItemResult:
     facts: dict[str, Any]
 
 
+def _label(item: str) -> str:
+    """Commit SHAs are shortened like git does; other item names are kept whole."""
+    return item[:12] if SHA.fullmatch(item) else item
+
+
 def named(results: list[ItemResult]) -> str:
-    listed = "; ".join(f"{r.item[:12]} ({r.note})" for r in results[:MAX_LISTED])
+    listed = "; ".join(f"{_label(r.item)} ({r.note})" for r in results[:MAX_LISTED])
     more = len(results) - MAX_LISTED
     return listed + (f"; and {more} more (see observed in report.json)" if more > 0 else "")
 

@@ -1,0 +1,71 @@
+# Remediation drafts: which draft files a failing (or MANUAL_REVIEW) check produces.
+#
+# kind      terraform | policy (Rego for conftest/OPA) | python (evidence script)
+# output    path inside remediation/<run_id>/
+# template  file in this folder; placeholders look like @{name}
+# checks    check IDs that trigger the draft
+# per_item  optional: render `item_template` once per failed population item whose
+#           resource is of this Terraform type (e.g. aws_s3_bucket.customer_data)
+#
+# Drafts are never applied by AuditForge. They are starting points for a reviewed change.
+
+drafts:
+  github_branch_protection:
+    kind: terraform
+    output: terraform/github_branch_protection.tf
+    template: github_branch_protection.tf.tmpl
+    checks: [GH-BP-01, GH-BP-02, GH-BP-03, GH-BP-04, GH-BP-05, GH-CM-01, GH-CM-02, GH-CM-03, GIT-CM-02, GIT-CM-03]
+
+  branch_protection_policy:
+    kind: policy
+    output: policy/branch_protection.rego
+    template: branch_protection.rego
+    checks: [GH-BP-01, GH-BP-02, GH-BP-03, GH-BP-04, GH-BP-05, GH-CM-03, GIT-CM-03]
+
+  pr_evidence_script:
+    kind: python
+    output: scripts/collect_pr_evidence.py
+    template: collect_pr_evidence.py.tmpl
+    checks: [GIT-CM-01, GIT-CM-02]
+
+  s3_encryption:
+    kind: terraform
+    output: terraform/s3_encryption.tf
+    template: s3_encryption.tf.tmpl
+    item_template: s3_encryption_item.tf.tmpl
+    per_item: aws_s3_bucket
+    checks: [IAC-ENC]
+
+  encryption_policy:
+    kind: policy
+    output: policy/encryption.rego
+    template: encryption.rego
+    checks: [IAC-ENC]
+
+  network_policy:
+    kind: policy
+    output: policy/network.rego
+    template: network.rego
+    checks: [IAC-NET]
+
+  s3_access_logging:
+    kind: terraform
+    output: terraform/s3_access_logging.tf
+    template: s3_access_logging.tf.tmpl
+    item_template: s3_access_logging_item.tf.tmpl
+    per_item: aws_s3_bucket
+    checks: [IAC-LOG]
+
+  s3_versioning:
+    kind: terraform
+    output: terraform/s3_versioning.tf
+    template: s3_versioning.tf.tmpl
+    item_template: s3_versioning_item.tf.tmpl
+    per_item: aws_s3_bucket
+    checks: [IAC-BAK]
+
+  kubernetes_privilege_policy:
+    kind: policy
+    output: policy/kubernetes_privilege.rego
+    template: kubernetes_privilege.rego
+    checks: [IAC-PRIV]

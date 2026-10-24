@@ -6,6 +6,8 @@ Exit codes: 0 = no FAIL findings (or report VALID), 1 = at least one FAIL
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 from datetime import date
@@ -17,8 +19,9 @@ import typer
 
 from auditforge import __version__
 from auditforge.checks import change_management as cm
-from auditforge.checks import local_git
+from auditforge.checks import iac, local_git
 from auditforge.checks.branch_protection import evaluate
+from auditforge.connectors.files import FileImporter, FileImportError
 from auditforge.connectors.git import REF_PATTERN, GitConnector, GitError
 from auditforge.connectors.github import (
     REPO_PATTERN,
@@ -27,10 +30,12 @@ from auditforge.connectors.github import (
     GitHubResponseError,
     utc_now,
 )
+from auditforge.gap.cli import attest_app, gap, scope_app
 from auditforge.identity import operator
-from auditforge.mappings import MappingError, Mappings
+from auditforge.mappings import IAC_RULES_FILE, MappingError, Mappings, load_iac_rules
 from auditforge.models import Evidence, Finding
 from auditforge.paths import default_mappings_dir, key_dir
+from auditforge.remediation import drafts as remediation
 from auditforge.report import build_report, new_run_id, write_report
 from auditforge.risk.cli import asset_app, risk_app
 from auditforge.risk.matrix import MatrixError
@@ -43,12 +48,18 @@ from auditforge.signing import (
 )
 from auditforge.store import Store
 from auditforge.ui.view import write_view
+from auditforge.workpaper.cli import exception_app, signoff_app
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="AuditForge: signed compliance evidence.")
 check_app = typer.Typer(no_args_is_help=True, help="Collect evidence and run compliance checks.")
 app.add_typer(check_app, name="check")
 app.add_typer(risk_app, name="risk")
 app.add_typer(asset_app, name="asset")
+app.add_typer(scope_app, name="scope")
+app.add_typer(attest_app, name="attest")
+app.command("gap")(gap)
+app.add_typer(exception_app, name="exception")
+app.add_typer(signoff_app, name="signoff")
 
 
 class RunError(RuntimeError):
@@ -150,6 +161,42 @@ def run_change_management(
         parameters={"period_start": period.first_day, "period_end_inclusive": period.last_day},
         findings=findings,
         evidence=gh.evidence,
+        mappings=mappings,
+        db_path=db_path,
+    )
+
+
+def run_iac(
+    *, results: list[Path], target: str, out_root: Path, db_path: Path, mappings_dir: Path
+) -> tuple[dict[str, Any], Path, bool]:
+    """Import scanner output files as evidence, classify every result, sign and store the run."""
+    mappings = Mappings.load(mappings_dir)
+    rules = load_iac_rules(mappings_dir, mappings)
+    started_at = utc_now()
+    run_id = new_run_id()
+    run_dir = out_root / run_id
+    importer = FileImporter(run_dir)
+    files = [importer.import_json(path, f"scan_{i + 1}_{path.stem}") for i, path in enumerate(results)]
+    for f in files:
+        if iac.detect_format(f.body) is None:
+            raise RunError(
+                f"{f.evidence.source_uri[5:]} is neither Checkov JSON nor SARIF {iac.SARIF_VERSION}"
+            )
+    titles = {check_id: spec.get("title", check_id) for check_id, spec in mappings.checks.items()}
+    findings = iac.evaluate(files, rules, titles, f"iac:{target}")
+    if not findings:
+        raise RunError("The scan files contain no results; check that the scanner ran on the right directory")
+    return _finish_run(
+        title=f"Infrastructure-as-Code Scan Report — `{target}`",
+        run_id=run_id,
+        run_dir=run_dir,
+        started_at=started_at,
+        target={"platform": "iac", "target": target, "files": ", ".join(str(p) for p in results)},
+        parameters={
+            "iac_rules_sha256": hashlib.sha256((mappings_dir / IAC_RULES_FILE).read_bytes()).hexdigest()
+        },
+        findings=findings,
+        evidence=importer.evidence,
         mappings=mappings,
         db_path=db_path,
     )
@@ -331,6 +378,33 @@ def github_change_management(
     _announce(report, run_dir, key_created)
 
 
+@check_app.command("iac")
+def iac_scan(
+    results: Annotated[
+        list[Path], typer.Option(help="Scanner output: Checkov JSON or SARIF 2.1.0 (repeatable)")
+    ],
+    target: Annotated[str, typer.Option(help="Name of what was scanned, e.g. payments-infra")] = "iac",
+    out: Annotated[Path, typer.Option(help="Directory for evidence/<run_id>/")] = Path("evidence"),
+    db: Annotated[Path, typer.Option(help="SQLite database")] = Path("auditforge.db"),
+    mappings_dir: Annotated[Path | None, typer.Option("--mappings", help="Mappings directory")] = None,
+) -> None:
+    """Import IaC scan results (Terraform, CloudFormation, Kubernetes) and map them to controls.
+
+    Run the scanner yourself, e.g. `checkov -d infra/ -o json > checkov.json` or any scanner's
+    SARIF output. AuditForge copies and hashes the file, so the evidence is exactly what it reported.
+    """
+    if not REF_PATTERN.match(target):
+        raise _fail(f"--target must be a simple name (letters, digits, . _ / -), got {target!r}")
+    try:
+        report, run_dir, key_created = run_iac(
+            results=results, target=target, out_root=out, db_path=db,
+            mappings_dir=mappings_dir or default_mappings_dir(),
+        )  # fmt: skip
+    except (FileImportError, RunError, MappingError, ValueError) as exc:
+        raise _fail(str(exc)) from None
+    _announce(report, run_dir, key_created)
+
+
 @check_app.command("git-change-management")
 def git_change_management(
     period_start: Annotated[str, typer.Option(help="First day of the audit period, YYYY-MM-DD (UTC)")],
@@ -450,6 +524,39 @@ def view(
         + (f", {len(failed)} FAILED verification: {', '.join(failed)}" if failed else "")
     )
     raise typer.Exit(1 if failed else 0)
+
+
+@app.command()
+def remediate(
+    report: Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="A check run's report.json")],
+    out: Annotated[Path, typer.Option(help="Directory for remediation/<run_id>/")] = Path("remediation"),
+    pubkey: Annotated[Path | None, typer.Option(help="Trusted key to verify the report first")] = None,
+    force: Annotated[bool, typer.Option(help="Overwrite existing drafts for this run")] = False,
+) -> None:
+    """Write remediation drafts (Terraform, Rego policy, evidence scripts) for failing checks.
+
+    Drafts are files for review; AuditForge never applies a change.
+    """
+    key_path = pubkey or key_dir() / PUBLIC_KEY_FILE
+    if not key_path.is_file():
+        raise _fail(f"No trusted public key at {key_path}. Pass --pubkey with the operator's public key.")
+    result = verify_report(report, load_public_key(key_path))
+    if not result.ok:
+        raise _fail(f"Refusing to draft from an unverified report. {result.message}")
+    doc = json.loads(report.read_text(encoding="utf-8"))
+    if "findings" not in doc:
+        raise _fail("remediate works on check reports (report.json); run it on the runs behind a gap report")
+    drafts = remediation.build(doc)
+    if not drafts:
+        typer.echo("No failing or manual-review findings with a remediation template; nothing to draft.")
+        raise typer.Exit(0)
+    target = out / doc["run_id"]
+    if target.exists() and not force:
+        raise _fail(f"{target} already exists; pass --force to overwrite the drafts")
+    written = remediation.write(doc, drafts, target)
+    for d, path in zip(drafts, written, strict=True):
+        typer.echo(f"{d.kind:<10} {path}  <- {', '.join(d.triggers)}")
+    typer.echo(f"Wrote {len(written)} draft(s) and README.md to {target}. Review them; nothing was applied.")
 
 
 @app.command()

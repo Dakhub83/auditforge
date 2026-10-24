@@ -116,6 +116,8 @@ button, select { font: inherit; color: inherit; background: none; border: 0; cur
 .pill-high, .pill-FAIL, .pill-exception { background-color: var(--risk-high-bg); color: var(--risk-high-text); }
 .pill-crit { background-color: var(--risk-high-bg); color: var(--risk-high-text); box-shadow: inset 0 0 0 1px var(--risk-high-text); }
 .pill-none { background-color: var(--raised); color: var(--text-muted); }
+/* An accepted exception is risk carried on purpose: shown in the medium tier, outlined. */
+.pill-accepted { background-color: transparent; color: var(--risk-med-text); box-shadow: inset 0 0 0 1px var(--risk-med-text); }
 .chip { font-size: 11px; color: var(--text-secondary); background: var(--raised); border: 1px solid var(--border-ink); border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
 button.chip:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -144,6 +146,7 @@ td strong { color: var(--text-primary); font-weight: 600; }
 .score.high .v, .score.crit .v { color: var(--risk-high-text); } .score.crit { border-color: var(--risk-high-text); }
 .score.none .v { color: var(--text-muted); }
 .callout { border: 1px solid rgba(255, 107, 107, .35); background: rgba(59, 17, 17, .45); color: #ffc2c2; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+.callout.accepted { border-color: rgba(255, 184, 108, .35); background: rgba(59, 42, 17, .45); color: #ffd9ad; }
 .items { display: grid; gap: 10px; }
 .item { background: rgba(10, 15, 28, .4); border: 1px solid var(--border-ink); border-radius: 6px; padding: 12px; display: grid; gap: 6px; text-align: left; width: 100%; }
 button.item:hover { border-color: #33456a; }
@@ -326,10 +329,12 @@ const closeRisk = () => { $("drawer-root").innerHTML = ""; };
 
 /* ---------- Evidence helpers (generic over all report types) ---------- */
 const exceptionsOf = (report) => report.findings.flatMap((f) => (f.observed?.items ?? []).filter((i) => i.outcome === "exception").map((i) => ({ ...i, check_id: f.check_id })));
-const itemId = (i) => i.number != null ? `#${i.number}` : i.sha ? i.sha.slice(0, 10) : "—";
+// Items differ by check: PRs (number), commits (sha) and IaC scanner results (rule_id + resource).
+const itemId = (i) => i.number != null ? `#${i.number}` : i.sha ? i.sha.slice(0, 10) : i.rule_id ?? "—";
 const itemDate = (i) => String(i.merged_at ?? i.committed_at ?? "").slice(0, 10);
-const itemWho = (i) => String(i.committer ?? i.author ?? "").split(" <")[0];
-const itemText = (i) => i.title ?? i.subject ?? i.message ?? "";
+const itemWho = (i) => String(i.committer ?? i.author ?? i.resource ?? "").split(" <")[0];
+const itemText = (i) => i.title ?? i.subject ?? i.message
+  ?? (i.rule_name != null ? `${i.rule_name}${i.file ? ` (${i.file}${i.line ? ":" + i.line : ""})` : ""}` : "");
 const verifyState = (r) => r._verify.ok === true ? "ok" : r._verify.ok === false ? "bad" : "no";
 
 /* ---------- Dashboard ---------- */
@@ -376,17 +381,25 @@ function renderEvidence() {
       <div class="card"><div class="seal"><div class="seal-mark ${v}">${{ ok: "✓", bad: "✗", no: "…" }[v]}</div><div>
         <div style="font-weight:600">${{ ok: "Signature and evidence verified", bad: "Verification FAILED", no: "Not verified" }[v]}</div>
         <div class="muted" style="font-size:12.5px">${esc(r._verify.message)}</div></div></div>
-        <div class="muted" style="font-size:12px;margin-top:12px">${esc(r.signature.algorithm)} · key ${esc(r.signature.public_key_fingerprint)} · re-checked when this page was generated</div></div>
+        <div class="muted" style="font-size:12px;margin-top:12px">${esc(r.signature.algorithm)} · key ${esc(r.signature.public_key_fingerprint)} · re-checked when this page was generated</div>
+        <div class="sect"><h3>Workpaper sign-off</h3>${signoffs(r)}</div></div>
     </div>
     <div class="card gap-top"><div class="card-title"><span>Control coverage</span><small>Worst result per control in this run</small></div>
       ${fws.map((fw) => `<div class="cov-row"><b style="font-size:13px">${esc(FW[fw] ?? fw)}</b><div class="row-wrap">${Object.keys(worst).filter((k) => k.startsWith(fw + "|")).map((k) => `<span class="ctl"><span class="dot ${worst[k]}"></span><span class="mono">${esc(k.split("|")[1])}</span>${esc(DATA.control_titles[k] ?? "")}</span>`).join("")}</div></div>`).join("")}</div>
     <div class="findings gap-top"><div>${fs.map((f) => `<button class="fbtn" data-finding="${esc(f.check_id)}" aria-pressed="${f.check_id === state.finding}">
-        <span class="item-top"><span class="mono muted">${esc(f.check_id)}</span><span class="pill pill-${f.status}">${LABEL[f.status]}</span></span><span style="font-weight:600">${esc(f.title)}</span></button>`).join("")}</div>
+        <span class="item-top"><span class="mono muted">${esc(f.check_id)}</span><span class="row-wrap"><span class="pill pill-${f.status}">${LABEL[f.status]}</span>${f._exception ? '<span class="pill pill-accepted">Accepted</span>' : ""}</span></span><span style="font-weight:600">${esc(f.title)}</span></button>`).join("")}</div>
       <div class="card">${findingDetail(fs.find((f) => f.check_id === state.finding))}</div></div>
     <div class="card gap-top"><div class="card-title"><span>Evidence chain</span><small>Verify with auditforge verify report.json --pubkey &lt;operator key&gt;</small></div><div class="tablebox"><table>
       <thead><tr><th>File</th><th>Source</th><th>Status</th><th>SHA-256</th></tr></thead><tbody>${r.evidence.map((e) => `<tr><td class="mono"><strong>${esc(e.file_path)}</strong></td>
       <td class="mono" style="min-width:260px;overflow-wrap:anywhere">${esc(e.source_uri)}</td><td>${e.http_status != null ? "HTTP " + e.http_status : "exit " + e.exit_code}</td>
       <td style="min-width:240px"><div class="hash"><code>${esc(e.sha256)}</code><button class="copy" data-copy="${esc(e.sha256)}">Copy</button></div></td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+function signoffs(r) {
+  const rows = r._signoffs ?? [];
+  if (!rows.length) return '<div class="muted" style="font-size:12.5px">Not signed off. Run auditforge signoff add &lt;report.json&gt; --role preparer</div>';
+  return `<div class="items">${rows.map((s) => `<div class="item"><div class="item-top"><b>${esc(s.role === "preparer" ? "Prepared" : "Reviewed")} by ${esc(s.signed_by)}</b>
+    <span class="muted" style="font-size:12px">${esc(when(s.signed_at))}</span></div>${s.note ? `<div class="muted" style="font-size:12px">${esc(s.note)}</div>` : ""}</div>`).join("")}</div>`;
 }
 
 function findingDetail(f) {
@@ -397,7 +410,8 @@ function findingDetail(f) {
   const tick = { ok: "✓", exception: "✗", review: "?" };
   const head = `<div class="item-top"><span class="mono muted">${esc(f.check_id)}</span><span class="pill pill-${f.status}">${LABEL[f.status]}</span></div>
     <div style="font-size:17px;font-weight:600;margin:6px 0 8px">${esc(f.title)}</div><p style="color:var(--text-secondary);max-width:80ch">${esc(f.detail)}</p>
-    <div class="row-wrap" style="margin-top:12px">${Object.entries(f.controls).flatMap(([fw, ids]) => ids.map((id) => `<span class="chip">${esc(FW[fw] ?? fw)} ${esc(id)}</span>`)).join("")}</div>`;
+    <div class="row-wrap" style="margin-top:12px">${Object.entries(f.controls).flatMap(([fw, ids]) => ids.map((id) => `<span class="chip">${esc(FW[fw] ?? fw)} ${esc(id)}</span>`)).join("")}</div>
+    ${f._exception ? `<div class="callout accepted">Accepted exception · ${esc(f._exception)}</div>` : ""}`;
   if (!items.length) {
     const facts = Object.entries(o).filter(([, v]) => typeof v !== "object" || v === null);
     return head + (facts.length ? `<div class="sect"><h3>Observed</h3><dl class="kv">${facts.map(([k, v]) => `<dt>${esc(human(k))}</dt><dd class="mono">${esc(v)}</dd>`).join("")}</dl></div>` : "");

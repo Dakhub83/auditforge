@@ -1,0 +1,53 @@
+# How the gap report ranks and sizes gaps. Data, not code: tune it to your
+# organisation, and the report records this file's SHA-256 so a reader knows
+# which method produced the ranking.
+#
+#   points   = gap weight + risk_weight x (highest current score of open risks
+#              linked to the control, 0..25)
+#   priority = the first tier whose min the points reach (tiers are descending)
+
+gap_weights:
+  failing: 40        # evidence shows the control is not operating
+  no_evidence: 25    # nothing shows the control exists or operates
+  needs_review: 15   # automation saw something but a human must decide
+
+risk_weight: 1
+
+tiers:
+  - {name: P1, min: 55, meaning: Fix now; a failing control under a high or critical risk}
+  - {name: P2, min: 40, meaning: Fix this quarter}
+  - {name: P3, min: 25, meaning: Plan into the roadmap}
+  - {name: P4, min: 0, meaning: Housekeeping}
+
+# Effort to close a gap, as a T-shirt size. These are starting estimates for a
+# small-to-mid SaaS company; adjust them. A needs_review gap is a human review,
+# so it is always the review size. Rules are checked in order; the first rule
+# whose prefix matches "<framework> <control_id>" wins.
+effort:
+  sizes:
+    S: 2 days or less
+    M: 3 to 10 days
+    L: 2 to 6 weeks
+    XL: more than 6 weeks
+  review: S
+  default: M
+  rules:
+    # Governance, policy and people controls: write, approve, communicate.
+    - {prefix: "SOC2 CC1.", size: M}
+    - {prefix: "SOC2 CC2.", size: S}
+    - {prefix: "SOC2 CC3.", size: M}
+    - {prefix: "SOC2 CC4.", size: M}
+    - {prefix: "SOC2 CC5.", size: M}
+    - {prefix: "ISO27001:2022 A.5.", size: M}
+    - {prefix: "ISO27001:2022 A.6.", size: S}
+    # Physical controls usually depend on facilities or a hosting provider's report.
+    - {prefix: "SOC2 CC6.4", size: M}
+    - {prefix: "ISO27001:2022 A.7.", size: M}
+    # Technical controls: build, configure and evidence across systems.
+    - {prefix: "SOC2 CC6.", size: L}
+    - {prefix: "SOC2 CC7.", size: L}
+    - {prefix: "SOC2 CC8.", size: M}
+    - {prefix: "SOC2 CC9.", size: L}
+    - {prefix: "ISO27001:2022 A.8.", size: L}
+    - {prefix: "NIST-800-53r5 ", size: L}
+    - {prefix: "SOX-ITGC ", size: L}

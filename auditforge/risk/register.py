@@ -26,6 +26,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from auditforge.risk.matrix import RiskMatrix
+from auditforge.store import latest_control_results
 
 TREATMENTS = ("mitigate", "accept", "transfer", "avoid")
 RISK_STATUSES = (
@@ -392,29 +393,8 @@ class RiskRegister:
     # --- Link to automated evidence ---------------------------------------------------
 
     def control_health(self, link: ControlLink) -> list[dict[str, str]]:
-        """Latest automated result per check and per resource that evidences this control.
-
-        Latest is per resource: a newer run against a different repo or branch says nothing
-        about this one, so it must not hide an older FAIL. Empty if no check maps to the control.
-        """
-        rows = self.conn.execute(
-            """
-            SELECT f.check_id, f.resource, f.status, r.run_id, r.started_at
-            FROM findings f
-            JOIN runs r USING (run_id)
-            JOIN check_control_map m ON m.check_id = f.check_id
-            WHERE m.framework = ? AND m.control_id = ?
-              AND r.started_at = (
-                  SELECT MAX(r2.started_at) FROM findings f2 JOIN runs r2 USING (run_id)
-                  WHERE f2.check_id = f.check_id AND f2.resource = f.resource)
-            ORDER BY f.resource, f.check_id
-            """,
-            (link.framework, link.control_id),
-        )
-        return [
-            {"check_id": c, "resource": res, "status": s, "run_id": run, "at": at}
-            for c, res, s, run, at in rows
-        ]
+        """Latest automated result per check and per resource that evidences this control."""
+        return latest_control_results(self.conn, link.framework, link.control_id)
 
     def residual_warnings(self, risk: Risk) -> list[str]:
         """Reasons the residual score may not be credible."""

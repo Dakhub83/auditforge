@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "kube-linter",
+          "rules": [
+            {"id": "privileged-container", "shortDescription": {"text": "Indicates when deployments have containers running in privileged mode."}, "defaultConfiguration": {"level": "error"}},
+            {"id": "run-as-non-root", "shortDescription": {"text": "Indicates when containers are not set to runAsNonRoot."}, "defaultConfiguration": {"level": "warning"}},
+            {"id": "latest-tag", "shortDescription": {"text": "Indicates when a deployment-like object is running a container with an image tagged latest."}},
+            {"id": "no-liveness-probe", "shortDescription": {"text": "Indicates when containers fail to specify a liveness probe."}}
+          ]
+        }
+      },
+      "results": [
+        {"ruleId": "privileged-container", "level": "error", "message": {"text": "container \"api\" is privileged"},
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "k8s/api-deployment.yaml"}, "region": {"startLine": 22}},
+                        "logicalLocations": [{"fullyQualifiedName": "payments/Deployment/api"}]}]},
+        {"ruleId": "run-as-non-root", "message": {"text": "container \"worker\" is not set to runAsNonRoot"},
+         "suppressions": [{"kind": "inSource", "justification": "Vendor image requires root; tracked in SEC-418"}],
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "k8s/worker.yaml"}, "region": {"startLine": 15}},
+                        "logicalLocations": [{"fullyQualifiedName": "payments/Deployment/worker"}]}]},
+        {"ruleId": "latest-tag", "kind": "pass", "message": {"text": "no latest tags"},
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "k8s/api-deployment.yaml"}}}]},
+        {"ruleId": "no-liveness-probe", "kind": "notApplicable", "message": {"text": "batch job"},
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "k8s/migrate-job.yaml"}}}]}
+      ]
+    }
+  ]
+}

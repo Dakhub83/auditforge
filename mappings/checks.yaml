@@ -77,3 +77,31 @@ checks:
     objectives: [CHG-REVIEW, PRIV-BYPASS]
     # A landed commit not created and signed by GitHub's merge was pushed directly,
     # skipping review; on a protected branch that takes a privileged bypass.
+
+  # Infrastructure-as-code scans (imported Checkov JSON or SARIF). Each IAC-*
+  # check groups scanner rules by control family; mappings/iac_rules.yaml decides
+  # which family a scanner rule belongs to.
+
+  IAC-ENC:
+    title: Infrastructure encrypts data at rest and in transit
+    objectives: [DATA-ENCRYPTION]
+
+  IAC-NET:
+    title: Infrastructure is not exposed beyond what it needs
+    objectives: [NETWORK-EXPOSURE]
+
+  IAC-LOG:
+    title: Infrastructure logs security-relevant activity
+    objectives: [LOGGING-MONITORING]
+
+  IAC-BAK:
+    title: Infrastructure data can be recovered
+    objectives: [BACKUP-RESILIENCE]
+
+  IAC-PRIV:
+    title: Infrastructure grants least privilege
+    objectives: [LEAST-PRIVILEGE]
+
+  IAC-CFG:
+    title: Infrastructure follows the secure configuration baseline
+    objectives: [SECURE-CONFIG]
