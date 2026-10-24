@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from pathlib import Path
@@ -12,6 +13,7 @@ from typer.testing import CliRunner
 from auditforge.cli import app
 from auditforge.mappings import Mappings
 from auditforge.paths import default_mappings_dir
+from auditforge.risk import export
 from auditforge.risk.cli import parse_asset, parse_control
 from auditforge.risk.matrix import MatrixError, RiskMatrix
 from auditforge.risk.register import AssetImpact, ControlLink, RiskError, RiskRegister
@@ -287,3 +289,56 @@ def test_cli_create_update_show_list(tmp_path: Path) -> None:
 def test_cli_invalid_input_exits_2(tmp_path: Path, args: list[str]) -> None:
     result = cli(tmp_path, *args)
     assert result.exit_code == 2, result.output
+
+
+# --- CSV export -----------------------------------------------------------------------
+
+
+def test_export_row_has_scores_links_and_warnings(reg: RiskRegister) -> None:
+    reg.create(
+        {**DATA_LEAK, "category": "Change management"}, "alice",
+        assets=[AssetImpact("AST-001", ("confidentiality", "integrity"))],
+        controls=[ControlLink("SOC2", "CC8.1"), ControlLink("ISO27001:2022", "A.8.24")],
+    )  # fmt: skip
+    reg.add_mitigation("R-001", "Encrypt backups", "Tom", "alice", due_date="2026-11-30")
+    _record_run(reg.conn, "r1", "2026-04-01T00:00:00+00:00", "payments-api@origin/main", "FAIL")
+    row = dict(zip(export.HEADER, export.row(reg, reg.get("R-001")), strict=True))
+    assert row["Assets (C/I/A)"] == "AST-001 Customer payments database (CI)"
+    assert (row["Inherent score"], row["Inherent band"]) == ("20", "Critical")
+    assert (row["Residual score"], row["Residual band"], row["Above appetite"]) == ("10", "High", "Yes")
+    assert row["Controls"] == "ISO27001:2022 A.8.24; SOC2 CC8.1"
+    assert (
+        "SOC2 CC8.1: FAIL GIT-CM-03 payments-api@origin/main (2026-04-01)" in row["Latest automated evidence"]
+    )
+    assert "ISO27001:2022 A.8.24: no automated check" in row["Latest automated evidence"]
+    assert row["Mitigations"] == "M-1 [planned] Encrypt backups (Tom, due 2026-11-30)"
+    assert "FAILED" in row["Warnings"]
+
+
+def test_export_unassessed_residual(reg: RiskRegister) -> None:
+    risk = reg.create({**DATA_LEAK, "residual_likelihood": None, "residual_impact": None}, "alice")
+    row = dict(zip(export.HEADER, export.row(reg, risk), strict=True))
+    assert (row["Residual score"], row["Residual band"]) == ("", "")
+    assert row["Above appetite"] == "Residual not assessed"
+
+
+@pytest.mark.parametrize("title", ['=HYPERLINK("http://x")', "+1", "-2+3", "@SUM(A1)"])
+def test_export_neutralises_spreadsheet_formulas(reg: RiskRegister, title: str) -> None:
+    risk = reg.create({**DATA_LEAK, "title": title}, "alice")
+    assert export.row(reg, risk)[1] == "'" + title
+
+
+def test_cli_export_writes_csv_and_refuses_overwrite(tmp_path: Path) -> None:
+    assert cli(tmp_path, *MINIMAL_ADD).exit_code == 0
+    assert cli(tmp_path, *MINIMAL_ADD[:3], "Søren's laptop stolen", *MINIMAL_ADD[4:]).exit_code == 0
+    out = tmp_path / "sheets" / "register.csv"
+    result = cli(tmp_path, "risk", "export", "--out", str(out))
+    assert result.exit_code == 0, result.output
+    assert "Wrote 2 risk(s)" in result.output
+    assert out.read_bytes().startswith(b"\xef\xbb\xbf")  # BOM, so Excel reads UTF-8
+    with out.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["Risk ID"] for r in rows] == ["R-001", "R-002"]
+    assert rows[1]["Title"] == "Søren's laptop stolen"
+    assert cli(tmp_path, "risk", "export", "--out", str(out)).exit_code == 2
+    assert cli(tmp_path, "risk", "export", "--out", str(out), "--force").exit_code == 0

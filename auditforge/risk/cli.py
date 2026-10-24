@@ -18,6 +18,7 @@ import typer
 from auditforge.identity import operator
 from auditforge.mappings import MappingError, Mappings
 from auditforge.paths import default_mappings_dir
+from auditforge.risk.export import write_csv
 from auditforge.risk.matrix import MatrixError, RiskMatrix
 from auditforge.risk.register import (
     ASSET_TYPES,
@@ -351,6 +352,21 @@ def risk_list(
             )
         typer.echo("\n'!' = has warnings (see 'risk show')\n")
         typer.echo(heatmap(reg, risks, residual=not inherent))
+
+
+@risk_app.command("export")
+def risk_export(
+    out: Annotated[Path, typer.Option("--out", help="CSV file to write")] = Path("risk-register.csv"),
+    force: Annotated[bool, typer.Option(help="Overwrite an existing file")] = False,
+    db: DbOpt = DEFAULT_DB,
+    mappings_dir: MappingsOpt = None,
+) -> None:
+    """Write the register as a CSV sheet (one row per risk) that opens in Excel."""
+    if out.exists() and not force:
+        raise _fail(f"{out} already exists; use --force to overwrite it")
+    with open_register(db, mappings_dir) as reg:
+        count = write_csv(reg, out)
+    typer.echo(f"Wrote {count} risk(s) to {out}")
 
 
 @risk_app.command("mitigate")
